@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { SubtitleTimeline, srtTime } from "../renderer/subtitles.js";
+import { SubtitleTimeline, srtTime, splitText } from "../renderer/subtitles.js";
 
 function makeTurn(t, { start, end, jp, es }) {
   t.speechStarted(start);
@@ -115,6 +115,65 @@ test("exportación SRT con formato de tiempos correcto", () => {
 
   const bilingual = t.toSrt({ bilingual: true });
   assert.match(bilingual, /字幕\nSubtítulo/);
+});
+
+test("un turno largo se trocea en subtítulos repartidos en su ventana", () => {
+  const t = new SubtitleTimeline();
+  const texto = Array.from(
+    { length: 6 },
+    (_, i) => `Esta es la oración número ${i + 1} del turno largo.`
+  ).join(" "); // ~290 caracteres, > 2 trozos
+  makeTurn(t, { start: 0, end: 15000, jp: "長い話", es: texto });
+
+  // Al inicio de la ventana se ve el primer trozo, no todo el bloque.
+  const first = t.activeAt(500);
+  assert.ok(first.spanish.length <= 90);
+  assert.ok(texto.startsWith(first.spanish.split(" ")[0]));
+
+  // Más adelante se ve un trozo distinto.
+  const later = t.activeAt(12000);
+  assert.ok(later);
+  assert.notEqual(later.spanish, first.spanish);
+
+  // Concatenados reconstruyen el texto completo (sin perder nada).
+  const chunks = t.chunksFor(0);
+  const joined = chunks.map((c) => c.spanish).join(" ").replace(/\s+/g, " ");
+  assert.equal(joined, texto.replace(/\s+/g, " "));
+});
+
+test("mientras el turno sigue abierto se muestra la cola en streaming", () => {
+  const t = new SubtitleTimeline();
+  t.speechStarted(1000);
+  t.inputTranscript("話し中");
+  t.responseStarted();
+  t.outputTextDelta("Texto que va llegando en vivo");
+
+  const live = t.activeAt(2000);
+  assert.ok(live.streaming);
+  assert.match(live.spanish, /llegando en vivo/);
+});
+
+test("el SRT de un turno largo tiene varios cues consecutivos", () => {
+  const t = new SubtitleTimeline();
+  const texto = "Primera parte de la charla, que sigue y sigue. ".repeat(4).trim();
+  makeTurn(t, { start: 0, end: 12000, jp: "長い", es: texto });
+
+  const srt = t.toSrt();
+  const cues = srt.trim().split("\n\n");
+  assert.ok(cues.length >= 2, `esperaba ≥2 cues, hubo ${cues.length}`);
+  // Los cues son consecutivos en el tiempo.
+  assert.match(cues[0], /^1\n00:00:00,000/);
+  assert.match(cues[1], /^2\n/);
+});
+
+test("splitText corta en puntuación y respeta el máximo", () => {
+  const pieces = splitText("Uno. Dos. Tres largos enunciados que superan el límite. Cuatro.", 30);
+  assert.ok(pieces.every((p) => p.length <= 30));
+  assert.equal(pieces.join(" "), "Uno. Dos. Tres largos enunciados que superan el límite. Cuatro.");
+
+  // Japonés sin espacios: corte duro sin perder caracteres.
+  const jp = splitText("これはとても長い日本語の文章でスペースがありません".repeat(3), 20);
+  assert.ok(jp.every((p) => p.length <= 20));
 });
 
 test("srtTime formatea horas, minutos, segundos y milisegundos", () => {

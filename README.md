@@ -45,6 +45,12 @@ pasado", pero perfectamente subtitulado.
   en la app iOS.
 - **Traductor de respaldo**: si el canal Realtime transcribe pero no traduce un
   turno, se traduce por REST para que ninguna frase quede sin subtítulo.
+- **Ritmo de subtítulos natural**: los turnos largos (habla continua sin
+  pausas, típica de TV/anime) no se muestran como un bloque gigante — el texto
+  se trocea en subtítulos de ~90 caracteres repartidos proporcionalmente a lo
+  largo del turno, y mientras un turno sigue abierto se muestra la cola del
+  texto como caption en vivo. Con habla muy continua conviene subir el atraso
+  a 12–15 s para que la traducción siempre llegue antes que su cuadro.
 - **Guardar la sesión**: video WebM en disco + exportación de subtítulos SRT.
 - **API Key segura**: prioridad `OPENAI_API_KEY` de entorno; si se ingresa en
   la app se guarda cifrada con DPAPI (`safeStorage`).

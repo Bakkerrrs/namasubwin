@@ -9,8 +9,10 @@
 //
 // Módulo puro (sin DOM) para poder probarlo con node --test.
 
-const MIN_DISPLAY_MS = 1800; // un subtítulo nunca dura menos que esto
-const TAIL_MS = 1200;        // margen tras el fin del habla
+const MIN_DISPLAY_MS = 1800;   // un subtítulo nunca dura menos que esto
+const TAIL_MS = 1200;          // margen tras el fin del habla
+const CHUNK_MAX_CHARS = 90;    // máx. caracteres por subtítulo en pantalla (~2 líneas)
+const CHUNK_MIN_MS = 1400;     // duración mínima de cada trozo de un turno largo
 
 export class SubtitleTimeline {
   constructor() {
@@ -119,14 +121,80 @@ export class SubtitleTimeline {
     return [e.startMs, end];
   }
 
-  /** Entrada activa en el instante `mediaMs` del video diferido (o null). */
+  /**
+   * Trozos de presentación de una entrada. Los turnos largos (habla continua
+   * sin pausas) llegan como un solo bloque de texto: aquí se parten en
+   * subtítulos legibles (≤ CHUNK_MAX_CHARS) repartidos proporcionalmente a lo
+   * largo de la ventana del turno, como haría un subtitulador.
+   */
+  chunksFor(index) {
+    const e = this.entries[index];
+    const win = this.displayWindow(index);
+    if (!win) return null;
+    const text = (e.spanish || e.japanese || "").trim();
+    if (!text) return null;
+
+    // Cachea una vez que el turno está cerrado y su texto es final.
+    if (e.done && e._chunks && e._chunksText === text) return e._chunks;
+
+    const pieces = splitText(text, CHUNK_MAX_CHARS);
+    const jpPieces = e.spanish
+      ? splitProportional(e.japanese.trim(), pieces)
+      : pieces.map(() => "");
+
+    const [start, end] = win;
+    const total = pieces.reduce((sum, p) => sum + p.length, 0);
+    const span = Math.max(end - start, pieces.length * CHUNK_MIN_MS);
+    const chunks = [];
+    let cursor = start;
+    pieces.forEach((piece, i) => {
+      const share = Math.max((piece.length / total) * span, CHUNK_MIN_MS);
+      chunks.push({
+        startMs: cursor,
+        endMs: cursor + share,
+        spanish: e.spanish ? piece : "",
+        japanese: e.spanish ? jpPieces[i] : piece,
+      });
+      cursor += share;
+    });
+
+    if (e.done) {
+      e._chunks = chunks;
+      e._chunksText = text;
+    }
+    return chunks;
+  }
+
+  /**
+   * Texto activo en el instante `mediaMs` del video diferido, ya troceado
+   * para pantalla: {japanese, spanish, streaming} o null.
+   */
   activeAt(mediaMs) {
     for (let i = this.entries.length - 1; i >= 0; i--) {
       const win = this.displayWindow(i);
       if (!win) continue;
-      const [start, end] = win;
-      if (mediaMs >= start && mediaMs < end) return this.entries[i];
-      if (start < mediaMs - 60_000) break; // muy atrás: dejar de buscar
+      if (win[0] < mediaMs - 120_000) break; // muy atrás: dejar de buscar
+
+      // Turno aún en curso al momento de reproducirse: caption en vivo con la
+      // cola del texto acumulado (evita el bloque gigante de golpe).
+      const e = this.entries[i];
+      if (!e.done && mediaMs >= win[0]) {
+        const inWindow = mediaMs < Math.max(win[1], (e.endMs ?? mediaMs + 1) + TAIL_MS);
+        if (!inWindow) continue;
+        const es = tailOf(e.spanish, CHUNK_MAX_CHARS);
+        const jp = tailOf(e.japanese, CHUNK_MAX_CHARS);
+        if (!es && !jp) return null;
+        return { japanese: es ? jp : "", spanish: es || jp, streaming: true };
+      }
+
+      const chunks = this.chunksFor(i);
+      if (!chunks) continue;
+      // Los trozos pueden extenderse más allá de la ventana base (mínimos de
+      // duración); un turno posterior gana porque se itera de atrás adelante.
+      if (mediaMs >= chunks[0].startMs && mediaMs < chunks[chunks.length - 1].endMs) {
+        const chunk = chunks.find((c) => mediaMs >= c.startMs && mediaMs < c.endMs);
+        if (chunk) return { ...chunk, streaming: false };
+      }
     }
     return null;
   }
@@ -139,24 +207,99 @@ export class SubtitleTimeline {
     const lines = [];
     let n = 0;
     this.entries.forEach((e, i) => {
-      const win = this.displayWindow(i);
-      const text = this._srtText(e, bilingual);
-      if (!win || !text) return;
-      n += 1;
-      lines.push(String(n));
-      lines.push(`${srtTime(win[0])} --> ${srtTime(win[1])}`);
-      lines.push(text);
-      lines.push("");
+      const chunks = this.chunksFor(i);
+      if (!chunks) return;
+      for (const chunk of chunks) {
+        const es = chunk.spanish.trim();
+        const jp = chunk.japanese.trim();
+        const text = bilingual && jp && es ? `${jp}\n${es}` : es || jp;
+        if (!text) continue;
+        n += 1;
+        lines.push(String(n));
+        lines.push(`${srtTime(chunk.startMs)} --> ${srtTime(chunk.endMs)}`);
+        lines.push(text);
+        lines.push("");
+      }
     });
     return lines.join("\n");
   }
+}
 
-  _srtText(entry, bilingual) {
-    const es = entry.spanish.trim();
-    const jp = entry.japanese.trim();
-    if (bilingual && jp && es) return `${jp}\n${es}`;
-    return es || jp;
+// ---------------------------------------------------------------------------
+// Troceo de texto
+// ---------------------------------------------------------------------------
+
+/** Parte `text` en piezas de hasta `maxChars`, prefiriendo cortes en
+ *  puntuación fuerte, luego comas/espacios, y como último recurso por
+ *  caracteres (el japonés no usa espacios). */
+export function splitText(text, maxChars) {
+  const clean = (text || "").trim();
+  if (clean.length <= maxChars) return clean ? [clean] : [];
+
+  // Primero por oraciones (puntuación occidental y japonesa).
+  const sentences = clean.match(/[^.!?。！？]+[.!?。！？]*/g) || [clean];
+  const pieces = [];
+  let current = "";
+  for (const sentence of sentences) {
+    const candidate = current ? current + sentence : sentence;
+    if (candidate.trim().length <= maxChars) {
+      current = candidate;
+      continue;
+    }
+    if (current.trim()) pieces.push(current.trim());
+    current = "";
+    // Oración más larga que maxChars: partir por comas/espacios/caracteres.
+    let rest = sentence.trim();
+    while (rest.length > maxChars) {
+      let cut = -1;
+      for (const re of [/[、,;:]\s?/g, /\s/g]) {
+        let match;
+        while ((match = re.exec(rest)) && match.index < maxChars) {
+          cut = match.index + match[0].length;
+        }
+        if (cut > maxChars * 0.4) break; // corte razonable encontrado
+      }
+      if (cut <= 0) cut = maxChars;
+      pieces.push(rest.slice(0, cut).trim());
+      rest = rest.slice(cut).trim();
+    }
+    current = rest;
   }
+  if (current.trim()) pieces.push(current.trim());
+  return pieces;
+}
+
+/** Reparte `text` en tantas piezas como `reference`, proporcional al largo de
+ *  cada pieza de referencia (para acompañar el japonés a los trozos de la
+ *  traducción). */
+function splitProportional(text, reference) {
+  const clean = (text || "").trim();
+  if (!clean || reference.length <= 1) {
+    return reference.map((_, i) => (i === 0 ? clean : ""));
+  }
+  const total = reference.reduce((sum, p) => sum + p.length, 0);
+  const out = [];
+  let offset = 0;
+  reference.forEach((piece, i) => {
+    const isLast = i === reference.length - 1;
+    const take = isLast
+      ? clean.length - offset
+      : Math.round((piece.length / total) * clean.length);
+    out.push(clean.slice(offset, offset + take).trim());
+    offset += take;
+  });
+  return out;
+}
+
+/** Cola de `text` de hasta `maxChars`, cortada en un límite razonable. */
+function tailOf(text, maxChars) {
+  const clean = (text || "").trim();
+  if (clean.length <= maxChars) return clean;
+  let tail = clean.slice(-maxChars);
+  // Evita empezar a mitad de palabra si hay un espacio cercano.
+  const space = tail.search(/\s/);
+  if (space > 0 && space < maxChars * 0.3) tail = tail.slice(space + 1);
+  return "…" + tail;
 }
 
 /** 61234 → "00:01:01,234" */
