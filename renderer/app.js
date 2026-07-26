@@ -77,6 +77,10 @@ async function init() {
   if (saved.vadPrefix) $("vad-prefix").value = saved.vadPrefix;
   if (saved.vadSilence) $("vad-silence").value = saved.vadSilence;
   if (saved.bilingual) $("bilingual").checked = true;
+  if (saved.hdrFix) $("hdr-fix").checked = true;
+  if (saved.hdrLevel) $("hdr-level").value = saved.hdrLevel;
+  $("hdr-level-label").textContent = $("hdr-level").value;
+  applyHdrFilter();
   syncSliderLabels();
 
   // API key guardada (env > cifrada en disco)
@@ -165,6 +169,21 @@ async function refreshSources() {
   await applyOutputDevice();
 }
 
+/** Re-satura y contrasta la imagen para compensar la captura HDR lavada. */
+function applyHdrFilter() {
+  const player = $("player");
+  if (!$("hdr-fix").checked) {
+    player.style.filter = "";
+    return;
+  }
+  const level = parseInt($("hdr-level").value, 10) / 100; // 0..1
+  const saturate = (1 + 0.8 * level).toFixed(2);
+  const contrast = (1 + 0.25 * level).toFixed(2);
+  const brightness = (1 - 0.06 * level).toFixed(2);
+  player.style.filter =
+    `saturate(${saturate}) contrast(${contrast}) brightness(${brightness})`;
+}
+
 /** Enruta el audio del reproductor diferido a la salida elegida. */
 async function applyOutputDevice() {
   const deviceId = $("output-select").value;
@@ -222,6 +241,20 @@ function wireEvents() {
     prefs.save({ outputDevice: $("output-select").value });
     await applyOutputDevice();
   });
+
+  // Corrección de color para capturas de escritorios HDR (solo afecta la
+  // visualización en la app, no lo que se guarda en el WebM).
+  $("hdr-fix").addEventListener("change", () => {
+    prefs.save({ hdrFix: $("hdr-fix").checked });
+    applyHdrFilter();
+  });
+  $("hdr-level").addEventListener("input", () => {
+    $("hdr-level-label").textContent = $("hdr-level").value;
+    applyHdrFilter();
+  });
+  $("hdr-level").addEventListener("change", () =>
+    prefs.save({ hdrLevel: $("hdr-level").value })
+  );
 
   $("btn-export-srt").addEventListener("click", exportSrt);
 

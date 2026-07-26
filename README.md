@@ -123,6 +123,24 @@ También puedes enrutar solo la app de origen (navegador, reproductor) a otro
 dispositivo desde *Configuración → Sistema → Sonido → Preferencias de volumen
 por aplicación* de Windows, sin instalar nada.
 
+## Pantallas HDR (imagen lavada / sin color)
+
+Cuando Windows compone el escritorio en **HDR**, la captura de pantalla llega
+al pipeline SDR sin un mapeo de tonos correcto y la imagen se ve **lavada y
+desaturada** (le pasa a cualquier capturador; OBS tardó años en resolverlo).
+Tres niveles de solución, de mejor a más rápido:
+
+1. **Color perfecto**: desactiva el HDR de Windows mientras uses la app —
+   atajo **Win+Alt+B** (Game Bar) o *Configuración → Pantalla → HDR*. Es la
+   única forma de que la captura (y la grabación WebM) tengan el color exacto.
+2. **Mitigación automática**: la app fuerza el perfil de color sRGB y el
+   capturador WGC de Windows, que maneja mejor las superficies HDR que la
+   duplicación DXGI clásica. En muchos equipos esto ya corrige gran parte.
+3. **Corrección en el reproductor**: panel *Imagen → Corrección de color
+   (pantalla HDR)* con intensidad ajustable — re-satura y contrasta la imagen
+   diferida. Afecta solo lo que ves en la app, **no** el archivo WebM guardado
+   (para grabar con color fiel usa la opción 1).
+
 ## Notas
 
 - El audio de la fuente se envía a la API de OpenAI; revisa los términos según

@@ -14,6 +14,16 @@ const {
 const fs = require("fs");
 const path = require("path");
 
+// Pantallas HDR: la captura de un escritorio compuesto en HDR llega sin mapeo
+// de tonos y se ve lavada. Estos switches mitigan: perfil de color sRGB para
+// todo el pipeline y el capturador WGC (maneja mejor las superficies HDR que
+// la duplicación DXGI clásica). El resto de la corrección es ajustable en la UI.
+app.commandLine.appendSwitch("force-color-profile", "srgb");
+app.commandLine.appendSwitch(
+  "enable-features",
+  "WebRtcAllowWgcDesktopCapturer,WebRtcAllowWgcScreenCapturer,WebRtcAllowWgcWindowCapturer"
+);
+
 let win = null;
 
 // ---------------------------------------------------------------------------
