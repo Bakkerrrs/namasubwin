@@ -91,6 +91,38 @@ turnos, ventanas de tiempo, respaldo y exportación SRT).
 | `renderer/subtitles.js` | Línea de tiempo y exportación SRT (lógica pura, testeada) |
 | `renderer/worklets/pcm16.js` | Audio capturado → PCM16 mono 24 kHz |
 
+## Ver y oír todo en el mismo PC (sin eco)
+
+El video nunca es problema: la app lo muestra diferido en su propia ventana.
+Con el **audio** hay una trampa: el loopback captura *todo* lo que suena por el
+dispositivo de salida por defecto — incluida la reproducción diferida de la
+propia app. Si ambas cosas salen por el mismo dispositivo, el audio diferido
+vuelve a entrar a la captura: subtítulos duplicados 10 s después y eco
+acumulándose.
+
+Por eso el panel tiene **"Salida del reproductor"**: el audio diferido de la
+app puede ir a un dispositivo distinto del capturado, lo que corta el bucle.
+Dos recetas según tu hardware:
+
+1. **Con dos salidas de audio** (auriculares USB/Bluetooth, HDMI del monitor):
+   deja la fuente sonando por la salida por defecto (la que captura el
+   loopback) y en la app elige la otra salida (p. ej. los auriculares). Oyes
+   solo el diferido por los auriculares; si no quieres oír el vivo de fondo,
+   baja el volumen físico de los parlantes (no lo silencies en Windows: el
+   loopback captura *después* del volumen maestro y se quedaría sin señal).
+
+2. **Con una sola salida — cable virtual** (la experiencia más limpia):
+   instala [VB-Cable](https://vb-audio.com/Cable/) y pon **CABLE Input** como
+   dispositivo de salida por defecto de Windows. La fuente "suena" hacia el
+   cable (inaudible), el loopback lo captura igual, y en la app eliges tus
+   parlantes reales como salida del reproductor. Resultado: oyes **solo** el
+   audio diferido, perfectamente sincronizado con el video y los subtítulos,
+   todo en el mismo PC.
+
+También puedes enrutar solo la app de origen (navegador, reproductor) a otro
+dispositivo desde *Configuración → Sistema → Sonido → Preferencias de volumen
+por aplicación* de Windows, sin instalar nada.
+
 ## Notas
 
 - El audio de la fuente se envía a la API de OpenAI; revisa los términos según

@@ -2,7 +2,13 @@
 // fuente → captura → [reproducción diferida] + [audio → Realtime API] →
 // línea de tiempo de subtítulos → capa quemada sobre el video.
 
-import { listCameras, listAudioInputs, warmUpPermissions, buildStream } from "./capture.js";
+import {
+  listCameras,
+  listAudioInputs,
+  listAudioOutputs,
+  warmUpPermissions,
+  buildStream,
+} from "./capture.js";
 import { DelayedPlayer } from "./delaybuffer.js";
 import { RealtimeService, REALTIME_MODELS, fallbackTranslate } from "./realtime.js";
 import { SubtitleTimeline } from "./subtitles.js";
@@ -139,6 +145,34 @@ async function refreshSources() {
     opt.textContent = "🎙 " + mic.label;
     audioSel.appendChild(opt);
   }
+
+  // Salidas de audio para el reproductor diferido (setSinkId). Elegir una
+  // distinta a la capturada corta el bucle de eco del loopback.
+  const outs = await listAudioOutputs();
+  const outSel = $("output-select");
+  const savedOut = prefs.load().outputDevice;
+  outSel.length = 1;
+  for (const out of outs) {
+    if (out.deviceId === "default") continue;
+    const opt = document.createElement("option");
+    opt.value = out.deviceId;
+    opt.textContent = "🔊 " + out.label;
+    outSel.appendChild(opt);
+  }
+  if (savedOut && [...outSel.options].some((o) => o.value === savedOut)) {
+    outSel.value = savedOut;
+  }
+  await applyOutputDevice();
+}
+
+/** Enruta el audio del reproductor diferido a la salida elegida. */
+async function applyOutputDevice() {
+  const deviceId = $("output-select").value;
+  try {
+    await $("player").setSinkId(deviceId === "default" ? "" : deviceId);
+  } catch (err) {
+    setStatus(`⚠ No se pudo cambiar la salida: ${err.message}`);
+  }
 }
 
 function wireEvents() {
@@ -182,6 +216,11 @@ function wireEvents() {
         .querySelectorAll(".source-item")
         .forEach((el) => el.classList.remove("selected"));
     }
+  });
+
+  $("output-select").addEventListener("change", async () => {
+    prefs.save({ outputDevice: $("output-select").value });
+    await applyOutputDevice();
   });
 
   $("btn-export-srt").addEventListener("click", exportSrt);

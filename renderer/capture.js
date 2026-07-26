@@ -19,6 +19,16 @@ export async function listAudioInputs() {
     .map((d) => ({ deviceId: d.deviceId, label: d.label || "Entrada de audio" }));
 }
 
+/** Lista salidas de audio (parlantes, auriculares, HDMI…) para el reproductor.
+ *  Elegir una salida distinta de la capturada evita que el audio diferido de
+ *  la propia app vuelva a entrar por el loopback (bucle de eco). */
+export async function listAudioOutputs() {
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  return devices
+    .filter((d) => d.kind === "audiooutput")
+    .map((d) => ({ deviceId: d.deviceId, label: d.label || "Salida de audio" }));
+}
+
 /**
  * Pide permisos una vez para que enumerateDevices devuelva las etiquetas
  * reales de los dispositivos (Chromium las oculta hasta conceder permiso).

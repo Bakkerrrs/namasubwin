@@ -114,6 +114,7 @@ details .field { margin-top: 8px; }
 
 .status { color: var(--muted); text-align: center; min-height: 18px; }
 .hint { color: #5b6275; font-size: 11px; text-align: center; }
+.hint.left { text-align: left; }
 
 /* Grilla de fuentes con miniatura, estilo OBS */
 .source-grid {
