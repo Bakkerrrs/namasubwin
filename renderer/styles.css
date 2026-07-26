@@ -1,0 +1,230 @@
+/* NamaSub — interfaz oscura tipo reproductor */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --panel-2: #1e2230;
+  --text: #e8eaf0;
+  --muted: #9aa3b5;
+  --accent: #e0455a;      /* rojo NamaSub, como el ícono iOS */
+  --accent-2: #ff7285;
+  --border: #2a2f3d;
+}
+
+html, body { height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  overflow: hidden;
+}
+
+#layout { display: flex; height: 100vh; }
+
+/* ---------------- Panel lateral ---------------- */
+
+#panel {
+  width: 330px;
+  min-width: 330px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+#panel h1 { font-size: 20px; letter-spacing: 0.5px; }
+#panel h1 .tag {
+  font-size: 11px;
+  vertical-align: middle;
+  background: var(--accent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-left: 6px;
+}
+
+#panel section {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#panel h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field span { color: var(--muted); font-size: 12px; }
+.row { display: flex; gap: 6px; align-items: center; }
+.row input { flex: 1; }
+
+input[type="password"], input[type="text"], select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 13px;
+  width: 100%;
+}
+
+input[type="range"] { accent-color: var(--accent); width: 100%; }
+
+.check { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.check input { accent-color: var(--accent); }
+
+button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: 0.4; cursor: default; }
+button.small { padding: 5px 9px; font-size: 12px; }
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px;
+}
+button.primary:hover { background: var(--accent-2); }
+button.primary.running { background: #35394a; border-color: #35394a; }
+
+details summary { color: var(--muted); font-size: 12px; cursor: pointer; }
+details .field { margin-top: 8px; }
+
+.status { color: var(--muted); text-align: center; min-height: 18px; }
+.hint { color: #5b6275; font-size: 11px; text-align: center; }
+
+/* Grilla de fuentes con miniatura, estilo OBS */
+.source-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.source-item {
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--bg);
+}
+.source-item img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; }
+.source-item .name {
+  font-size: 11px;
+  padding: 4px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+.source-item.selected { border-color: var(--accent); }
+.source-item.selected .name { color: var(--text); }
+
+/* ---------------- Zona de video ---------------- */
+
+#stage {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  background: #000;
+}
+
+#video-wrap { position: relative; flex: 1; }
+
+#player {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+/* Capa de subtítulos quemados encima del video */
+#subtitle-layer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  padding: 0 6%;
+  z-index: 5;
+}
+
+.sub-line {
+  display: none;
+  max-width: 100%;
+  text-align: center;
+  padding: 4px 14px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.62);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
+  white-space: pre-wrap;
+}
+.sub-line.visible { display: block; }
+
+.sub-line.es {
+  font-size: clamp(20px, 3.4vw, 42px);
+  font-weight: 600;
+  color: #fff;
+}
+.sub-line.jp {
+  font-size: clamp(13px, 2vw, 24px);
+  color: #ffd9de;
+}
+
+#stage-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #444c5e;
+  font-size: 18px;
+  z-index: 2;
+}
+
+#buffer-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 13px;
+  z-index: 6;
+}
+
+.hidden { display: none !important; }
+
+/* Pantalla completa: solo video y subtítulos */
+body.fullscreen #panel { display: none; }

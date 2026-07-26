@@ -1,0 +1,15 @@
+{
+  "name": "namasub-win",
+  "version": "0.1.0",
+  "description": "NamaSub para Windows — mira contenido japonés con subtítulos en español generados en vivo (video diferido para compensar la traducción).",
+  "main": "main.js",
+  "author": "Bakkerrrs",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

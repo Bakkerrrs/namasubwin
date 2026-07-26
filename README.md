@@ -1,0 +1,102 @@
+# NamaSub para Windows
+
+App de escritorio para **mirar contenido japonés con subtítulos en español
+generados en vivo**. Captura cualquier fuente de video/audio del PC (estilo
+OBS), translitera y traduce la capa de audio con OpenAI, y reproduce el video
+**dentro de la app** con los subtítulos quemados como capa de imagen encima.
+
+Es la hermana Windows de [namasub_ios](https://github.com/Bakkerrrs/namasub_ios):
+comparte los mismos prompts de traducción, los parámetros de VAD y el pipeline
+audio → transcripción → traducción por la **Realtime API** de OpenAI. Lo que en
+iOS es imposible (capturar el audio del sistema), en Windows es el modo por
+defecto.
+
+## Cómo resuelve la sincronía (video diferido)
+
+La transcripción + traducción tardan unos segundos en llegar. En vez de mostrar
+los subtítulos tarde, la app **retrasa el video**:
+
+```
+  vivo ──► captura ──► audio → Realtime API (STT + traducción JP→ES)  ~2-4 s
+              │
+              └──► buffer de N segundos (configurable, 10 s por defecto)
+                        │
+                        ▼
+                   pantalla: video + audio diferidos, con los subtítulos
+                   ya listos apareciendo en el instante exacto del habla
+```
+
+El reloj del buffer y el reloj del VAD del servidor son el mismo (0 = pulsar
+Iniciar), así que cada subtítulo conoce su ventana `[inicio, fin]` de habla y
+se dibuja sobre el cuadro correcto. Ves el contenido 10 segundos "en el
+pasado", pero perfectamente subtitulado.
+
+## Funciones
+
+- **Fuentes estilo OBS**: pantallas y ventanas con miniatura, cámaras y
+  capturadoras (UVC), y como audio el **loopback del sistema** (lo que suena
+  por los parlantes) o cualquier entrada (micrófono, line-in).
+- **Subtítulos quemados** como capa de imagen sobre el video (opcional
+  bilingüe: japonés arriba, español abajo).
+- **Reproducción en la misma app**, ventana o pantalla completa con
+  **Alt+Enter** (o F11).
+- **Atraso configurable** (5–25 s) con corrección suave de deriva.
+- **VAD ajustable en caliente** (umbral, prefijo, silencio de corte), igual que
+  en la app iOS.
+- **Traductor de respaldo**: si el canal Realtime transcribe pero no traduce un
+  turno, se traduce por REST para que ninguna frase quede sin subtítulo.
+- **Guardar la sesión**: video WebM en disco + exportación de subtítulos SRT.
+- **API Key segura**: prioridad `OPENAI_API_KEY` de entorno; si se ingresa en
+  la app se guarda cifrada con DPAPI (`safeStorage`).
+
+## Requisitos
+
+- Windows 10/11.
+- [Node.js](https://nodejs.org) 20 o superior (para ejecutar desde el código).
+- Una API Key de OpenAI con acceso a la Realtime API.
+
+## Ejecutar
+
+```bash
+npm install
+npm start
+```
+
+1. Elige la **fuente de video** (pantalla, ventana o cámara/capturadora).
+2. Deja el audio en **"Audio del sistema (loopback)"** para transliterar lo que
+   suena por los parlantes, o elige una entrada específica.
+3. Pega tu **API Key** y pulsa **▶ Iniciar**.
+4. El video aparece a los N segundos (el globo indica la cuenta) ya
+   subtitulado. Alt+Enter para pantalla completa.
+
+## Pruebas
+
+```bash
+npm test
+```
+
+Prueban la lógica pura de la línea de tiempo de subtítulos (emparejamiento de
+turnos, ventanas de tiempo, respaldo y exportación SRT).
+
+## Estructura
+
+| Archivo | Rol |
+|---|---|
+| `main.js` | Proceso principal: ventana, Alt+Enter, fuentes, API key, guardado |
+| `preload.js` | Puente seguro main ↔ renderer |
+| `renderer/app.js` | Orquestación (equivalente al `TranslatorViewModel` de iOS) |
+| `renderer/capture.js` | Construcción del stream según la fuente elegida |
+| `renderer/delaybuffer.js` | Reproducción diferida (MediaRecorder → MSE) |
+| `renderer/realtime.js` | Cliente Realtime API (puerto de `RealtimeService.swift`) + respaldo |
+| `renderer/subtitles.js` | Línea de tiempo y exportación SRT (lógica pura, testeada) |
+| `renderer/worklets/pcm16.js` | Audio capturado → PCM16 mono 24 kHz |
+
+## Notas
+
+- El audio de la fuente se envía a la API de OpenAI; revisa los términos según
+  tu caso de uso.
+- El loopback captura **todo** el audio del sistema: silencia otras apps si no
+  quieres que se mezclen en la transliteración.
+- La grabación guardada es WebM con el video/audio originales; los subtítulos
+  van en el SRT exportado (los reproductores los cargan automáticamente si
+  comparten nombre de archivo).
