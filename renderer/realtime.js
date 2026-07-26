@@ -36,25 +36,37 @@ export class RealtimeService {
      *  responseCompleted
      */
     this.onEvent = () => {};
+    /** Callback de depuración: (dirección "tx"|"rx"|"ws", detalle) => void. */
+    this.onDebug = () => {};
+    this._audioChunksSent = 0;
   }
 
   connect() {
     const url = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this.model)}`;
     // El navegador no permite headers en WebSocket: la Realtime API acepta la
     // key por subprotocolo (openai-insecure-api-key), pensado justo para esto.
+    // OJO: sin el subprotocolo beta — los payloads son del formato GA, el
+    // mismo que usa la app iOS.
+    this.onDebug("ws", `Conectando a ${url}`);
     this.ws = new WebSocket(url, [
       "realtime",
       `openai-insecure-api-key.${this.apiKey}`,
-      "openai-beta.realtime-v1",
     ]);
 
     this.ws.onopen = () => {
+      this.onDebug("ws", `Conectado (subprotocolo: ${this.ws.protocol || "—"})`);
       this._sendSessionUpdate();
       this.onEvent("connected");
     };
     this.ws.onmessage = (event) => this._handle(event.data);
-    this.ws.onerror = () => this.onEvent("error", "Error de conexión Realtime");
-    this.ws.onclose = () => this.onEvent("disconnected");
+    this.ws.onerror = () => {
+      this.onDebug("ws", "onerror del WebSocket");
+      this.onEvent("error", "Error de conexión Realtime");
+    };
+    this.ws.onclose = (event) => {
+      this.onDebug("ws", `Cerrado: código ${event.code} ${event.reason || ""}`);
+      this.onEvent("disconnected");
+    };
   }
 
   disconnect() {
@@ -75,7 +87,11 @@ export class RealtimeService {
     for (let i = 0; i < bytes.length; i += CHUNK) {
       binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
     }
-    this._send({ type: "input_audio_buffer.append", audio: btoa(binary) });
+    this._send({ type: "input_audio_buffer.append", audio: btoa(binary) }, true);
+    this._audioChunksSent += 1;
+    if (this._audioChunksSent % 100 === 0) {
+      this.onDebug("tx", `${this._audioChunksSent} bloques de audio enviados`);
+    }
   }
 
   /** Actualiza los parámetros de VAD en caliente (sin reconectar). */
@@ -142,16 +158,23 @@ export class RealtimeService {
         this.onEvent("responseCompleted");
         break;
       case "error":
+        this.onDebug("rx", `ERROR: ${JSON.stringify(obj.error || obj)}`);
         this.onEvent("error", obj.error?.message || "Error de Realtime");
         break;
       default:
-        break; // otros eventos del ciclo de vida
+        // Otros eventos del ciclo de vida: visibles en modo debug para
+        // detectar discrepancias de nombres entre versiones de la API.
+        this.onDebug("rx", `${obj.type} ${JSON.stringify(obj).slice(0, 180)}`);
+        break;
     }
   }
 
-  _send(payload) {
+  _send(payload, quiet = false) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(payload));
+      if (!quiet) this.onDebug("tx", JSON.stringify(payload).slice(0, 300));
+    } else if (!quiet) {
+      this.onDebug("tx", `descartado (WS no abierto): ${payload.type}`);
     }
   }
 }

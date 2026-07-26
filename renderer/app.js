@@ -16,6 +16,31 @@ import { SubtitleTimeline } from "./subtitles.js";
 const $ = (id) => document.getElementById(id);
 
 // ---------------------------------------------------------------------------
+// Registro de depuración (activable en el panel: "Modo debug")
+// ---------------------------------------------------------------------------
+
+const dbg = {
+  lines: [],
+  max: 600,
+  lastRms: 0,
+  log(tag, msg) {
+    const time = new Date().toISOString().slice(11, 23);
+    const line = `${time} [${tag}] ${msg}`;
+    this.lines.push(line);
+    if (this.lines.length > this.max) this.lines.shift();
+    console.debug(line);
+    const el = $("debug-log");
+    if (el && !el.parentElement.classList.contains("hidden")) {
+      el.textContent = this.lines.slice(-200).join("\n");
+      el.scrollTop = el.scrollHeight;
+    }
+  },
+  text() {
+    return this.lines.join("\n");
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Estado
 // ---------------------------------------------------------------------------
 
@@ -31,6 +56,7 @@ const state = {
   recordingPath: null,
   fallbackTimer: 0,
   renderTimer: 0,
+  debugTimer: 0,
   apiKeyFromEnv: false,
 };
 
@@ -77,6 +103,10 @@ async function init() {
   if (saved.vadPrefix) $("vad-prefix").value = saved.vadPrefix;
   if (saved.vadSilence) $("vad-silence").value = saved.vadSilence;
   if (saved.bilingual) $("bilingual").checked = true;
+  if (saved.debug) {
+    $("debug-mode").checked = true;
+    $("debug-panel").classList.remove("hidden");
+  }
   if (saved.hdrFix) $("hdr-fix").checked = true;
   if (saved.hdrLevel) $("hdr-level").value = saved.hdrLevel;
   $("hdr-level-label").textContent = $("hdr-level").value;
@@ -256,6 +286,20 @@ function wireEvents() {
     prefs.save({ hdrLevel: $("hdr-level").value })
   );
 
+  $("debug-mode").addEventListener("change", () => {
+    const on = $("debug-mode").checked;
+    $("debug-panel").classList.toggle("hidden", !on);
+    prefs.save({ debug: on });
+    if (on) {
+      $("debug-log").textContent = dbg.lines.slice(-200).join("\n");
+      dbg.log("app", "Modo debug activado");
+    }
+  });
+  $("btn-copy-log").addEventListener("click", async () => {
+    await navigator.clipboard.writeText(dbg.text());
+    setStatus("Registro copiado al portapapeles");
+  });
+
   $("btn-export-srt").addEventListener("click", exportSrt);
 
   window.namasub.onFullscreen((isFull) =>
@@ -301,15 +345,25 @@ async function start() {
   $("btn-toggle").disabled = true;
   setStatus("Preparando captura…");
 
+  dbg.log("app", `Iniciando: video=${JSON.stringify(video)} audio=${JSON.stringify(audio)}`);
+
   try {
     state.stream = await buildStream(video, audio, {
       desktopAudioId: state.selectedSource?.id,
     });
   } catch (err) {
+    dbg.log("app", `buildStream falló: ${err.name}: ${err.message}`);
     setStatus(`⚠ No se pudo capturar: ${err.message}`);
     $("btn-toggle").disabled = false;
     return;
   }
+
+  dbg.log(
+    "app",
+    `Stream listo: ${state.stream.getVideoTracks().length} video, ` +
+      `${state.stream.getAudioTracks().length} audio ` +
+      `(${state.stream.getAudioTracks()[0]?.label || "sin pista de audio"})`
+  );
 
   if (state.stream.getAudioTracks().length === 0) {
     setStatus("⚠ La fuente no entrega audio; revisa el origen de audio");
@@ -329,6 +383,7 @@ async function start() {
   state.timeline = new SubtitleTimeline();
   state.realtime = new RealtimeService({ apiKey, model: $("model-select").value, ...vadOpts() });
   state.realtime.onEvent = handleRealtimeEvent;
+  state.realtime.onDebug = (tag, msg) => dbg.log(tag, msg);
   state.realtime.connect();
 
   // Audio en vivo → PCM16 24 kHz → Realtime
@@ -345,9 +400,10 @@ async function start() {
   });
   await state.player.start();
 
-  // Bucles de render y de traductor de respaldo
+  // Bucles de render, traductor de respaldo y estadísticas de depuración
   state.renderTimer = requestAnimationFrame(renderLoop);
   state.fallbackTimer = setInterval(runFallback, 1500);
+  state.debugTimer = setInterval(updateDebugStats, 1000);
 
   state.running = true;
   $("btn-toggle").disabled = false;
@@ -368,9 +424,11 @@ function vadOpts() {
 }
 
 async function stop() {
+  dbg.log("app", "Deteniendo sesión");
   state.running = false;
   cancelAnimationFrame(state.renderTimer);
   clearInterval(state.fallbackTimer);
+  clearInterval(state.debugTimer);
 
   state.realtime?.disconnect();
   state.realtime = null;
@@ -418,8 +476,15 @@ async function startAudioPipe() {
   const source = state.audioCtx.createMediaStreamSource(audioOnly);
   state.workletNode = new AudioWorkletNode(state.audioCtx, "pcm16");
   state.workletNode.port.onmessage = (event) => {
+    // Nivel RMS del bloque para el medidor de depuración: si se queda en 0,
+    // la fuente de audio no está entregando señal.
+    const samples = new Int16Array(event.data);
+    let sum = 0;
+    for (let i = 0; i < samples.length; i += 8) sum += samples[i] * samples[i];
+    dbg.lastRms = Math.sqrt(sum / (samples.length / 8)) / 32768;
     state.realtime?.sendAudio(event.data);
   };
+  dbg.log("app", `Pipe de audio listo (AudioContext ${state.audioCtx.sampleRate} Hz)`);
   // El worklet no produce salida audible; se conecta solo para mantenerlo vivo.
   source.connect(state.workletNode);
 }
@@ -431,6 +496,11 @@ async function startAudioPipe() {
 function handleRealtimeEvent(type, payload) {
   const t = state.timeline;
   if (!t) return;
+  if (type !== "outputTextDelta") {
+    const detail =
+      typeof payload === "string" ? payload.slice(0, 120) : payload ?? "";
+    dbg.log("evt", `${type} ${detail}`);
+  }
   switch (type) {
     case "connected":
       if (state.running) setStatus("🎧 Escuchando…");
@@ -508,6 +578,22 @@ function hideSubtitles() {
   setLine($("sub-es"), "");
 }
 
+/** Línea de estadísticas + medidor de audio del panel de depuración. */
+function updateDebugStats() {
+  if ($("debug-panel").classList.contains("hidden")) return;
+  const capture = state.player?.captureTimeMs() ?? 0;
+  const media = state.player?.mediaTimeMs() ?? 0;
+  const lag = capture - media;
+  const entries = state.timeline?.entries.length ?? 0;
+  const translated =
+    state.timeline?.entries.filter((e) => e.spanish).length ?? 0;
+  $("debug-stats").textContent =
+    `vivo ${(capture / 1000).toFixed(1)}s · video ${(media / 1000).toFixed(1)}s · ` +
+    `atraso ${(lag / 1000).toFixed(1)}s · subs ${translated}/${entries}`;
+  $("audio-meter-fill").style.width =
+    `${Math.min(100, Math.round(dbg.lastRms * 300))}%`;
+}
+
 function onPlayerState(stateTxt) {
   const badge = $("buffer-badge");
   if (stateTxt.startsWith("buffering:")) {
@@ -515,6 +601,7 @@ function onPlayerState(stateTxt) {
     badge.textContent = `⏳ Diferido: el video comienza en ${remaining} s`;
     badge.classList.remove("hidden");
   } else {
+    if (stateTxt === "playing") dbg.log("player", "Reproducción diferida iniciada");
     badge.textContent = "";
     badge.classList.add("hidden");
   }

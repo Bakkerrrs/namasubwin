@@ -227,5 +227,59 @@ details .field { margin-top: 8px; }
 
 .hidden { display: none !important; }
 
+/* ---------------- Panel de depuración ---------------- */
+
+#debug-panel {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  width: min(560px, 60%);
+  max-height: 45%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(10, 12, 18, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  z-index: 20;
+  font-size: 12px;
+}
+
+.debug-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+.debug-head span:first-child { color: var(--accent-2); font-weight: 600; }
+#debug-stats { flex: 1; font-family: Consolas, monospace; font-size: 11px; }
+
+.debug-meter { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.meter {
+  flex: 1;
+  height: 8px;
+  background: #222735;
+  border-radius: 4px;
+  overflow: hidden;
+}
+#audio-meter-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #3ba55d, #d7b93c 70%, var(--accent));
+  transition: width 0.1s linear;
+}
+
+#debug-log {
+  overflow-y: auto;
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #aeb7c9;
+  white-space: pre-wrap;
+  word-break: break-all;
+  min-height: 80px;
+}
+
 /* Pantalla completa: solo video y subtítulos */
 body.fullscreen #panel { display: none; }

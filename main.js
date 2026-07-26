@@ -49,10 +49,15 @@ function createWindow() {
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
 
   // Alt+Enter o F11 alternan pantalla completa, como los reproductores clásicos.
+  // F12 abre las DevTools (útil junto al modo debug de la app).
   win.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
     const altEnter = input.alt && input.key === "Enter";
-    if (input.type === "keyDown" && (altEnter || input.key === "F11")) {
+    if (altEnter || input.key === "F11") {
       win.setFullScreen(!win.isFullScreen());
+      event.preventDefault();
+    } else if (input.key === "F12") {
+      win.webContents.toggleDevTools();
       event.preventDefault();
     }
   });

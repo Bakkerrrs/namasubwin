@@ -141,6 +141,26 @@ Tres niveles de solución, de mejor a más rápido:
    diferida. Afecta solo lo que ves en la app, **no** el archivo WebM guardado
    (para grabar con color fiel usa la opción 1).
 
+## Si no aparecen subtítulos (modo debug)
+
+Activa *Depuración → Modo debug* en el panel: sobre el video aparece un
+recuadro con el registro en vivo, una línea de estadísticas
+(`vivo · video · atraso · subs N/M`) y un **medidor del audio** que viaja a la
+API. Diagnóstico rápido:
+
+- **Medidor en 0** → la fuente de audio no entrega señal: revisa que el
+  contenido esté sonando por la salida por defecto (loopback) o que elegiste
+  la entrada correcta.
+- **`ERROR:` en el registro** → la API rechazó algo (key inválida, modelo sin
+  acceso, payload). El texto completo del error queda en el registro.
+- **`Cerrado: código 1008/4xx`** → autenticación: verifica la API Key y que tu
+  cuenta tenga acceso a la Realtime API.
+- **Llegan `speechStarted` pero no `inputTranscript`** → el VAD detecta voz
+  pero la transcripción falla; el registro muestra los eventos crudos.
+
+El botón **Copiar registro** copia todo al portapapeles para compartirlo.
+F12 abre las DevTools de Chromium si necesitas ir más profundo.
+
 ## Notas
 
 - El audio de la fuente se envía a la API de OpenAI; revisa los términos según

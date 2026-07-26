@@ -110,6 +110,14 @@
         <button id="btn-export-srt" class="small" disabled>Exportar SRT…</button>
       </section>
 
+      <section>
+        <h2>Depuración</h2>
+        <label class="check">
+          <input id="debug-mode" type="checkbox" />
+          <span>Modo debug (registro y medidor)</span>
+        </label>
+      </section>
+
       <button id="btn-toggle" class="primary">▶ Iniciar</button>
       <p id="status" class="status">Detenido</p>
       <p class="hint">Alt+Enter / F11: pantalla completa</p>
@@ -126,6 +134,20 @@
         </div>
         <div id="stage-hint">Elige una fuente y pulsa <b>Iniciar</b></div>
         <div id="buffer-badge" class="hidden"></div>
+
+        <!-- Panel de depuración (activable desde el panel lateral) -->
+        <div id="debug-panel" class="hidden">
+          <div class="debug-head">
+            <span>Debug</span>
+            <span id="debug-stats">—</span>
+            <button id="btn-copy-log" class="small">Copiar registro</button>
+          </div>
+          <div class="debug-meter">
+            <span>Audio→API</span>
+            <div class="meter"><div id="audio-meter-fill"></div></div>
+          </div>
+          <pre id="debug-log"></pre>
+        </div>
       </div>
     </section>
   </main>
