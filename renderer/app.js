@@ -111,6 +111,10 @@ async function init() {
   if (saved.hdrLevel) $("hdr-level").value = saved.hdrLevel;
   $("hdr-level-label").textContent = $("hdr-level").value;
   applyHdrFilter();
+  if (saved.subFont) $("sub-font").value = saved.subFont;
+  if (saved.subSize) $("sub-size").value = saved.subSize;
+  if (saved.subBg != null) $("sub-bg").value = saved.subBg;
+  applySubtitleStyle();
   syncSliderLabels();
 
   // API key guardada (env > cifrada en disco)
@@ -199,6 +203,20 @@ async function refreshSources() {
   await applyOutputDevice();
 }
 
+/** Aplica fuente, tamaño y transparencia del fondo a la capa de subtítulos. */
+function applySubtitleStyle() {
+  const layer = $("subtitle-layer");
+  const font = $("sub-font").value.trim() || "Segoe UI";
+  const scale = parseInt($("sub-size").value, 10) / 100;
+  const alpha = parseInt($("sub-bg").value, 10) / 100;
+  // Nombre de fuente entre comillas por si contiene espacios (Yu Gothic UI).
+  layer.style.setProperty("--sub-font", `"${font.replace(/"/g, "")}"`);
+  layer.style.setProperty("--sub-scale", String(scale));
+  layer.style.setProperty("--sub-bg-alpha", String(alpha));
+  $("sub-size-label").textContent = `${$("sub-size").value}%`;
+  $("sub-bg-label").textContent = `${$("sub-bg").value}%`;
+}
+
 /** Re-satura y contrasta la imagen para compensar la captura HDR lavada. */
 function applyHdrFilter() {
   const player = $("player");
@@ -285,6 +303,18 @@ function wireEvents() {
   $("hdr-level").addEventListener("change", () =>
     prefs.save({ hdrLevel: $("hdr-level").value })
   );
+
+  // Estilo de subtítulos: se aplica en vivo y se persiste al soltar el control.
+  $("sub-font").addEventListener("input", applySubtitleStyle);
+  $("sub-font").addEventListener("change", () =>
+    prefs.save({ subFont: $("sub-font").value })
+  );
+  for (const id of ["sub-size", "sub-bg"]) {
+    $(id).addEventListener("input", applySubtitleStyle);
+    $(id).addEventListener("change", () =>
+      prefs.save({ subSize: $("sub-size").value, subBg: $("sub-bg").value })
+    );
+  }
 
   $("debug-mode").addEventListener("change", () => {
     const on = $("debug-mode").checked;

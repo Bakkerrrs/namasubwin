@@ -103,6 +103,31 @@
           <input id="bilingual" type="checkbox" />
           <span>Mostrar también el japonés</span>
         </label>
+        <label class="field">
+          <span>Fuente</span>
+          <input id="sub-font" type="text" list="font-list" placeholder="Segoe UI" />
+          <datalist id="font-list">
+            <option value="Segoe UI"></option>
+            <option value="Arial"></option>
+            <option value="Verdana"></option>
+            <option value="Tahoma"></option>
+            <option value="Georgia"></option>
+            <option value="Trebuchet MS"></option>
+            <option value="Consolas"></option>
+            <option value="Meiryo"></option>
+            <option value="Yu Gothic UI"></option>
+            <option value="MS Gothic"></option>
+            <option value="Noto Sans JP"></option>
+          </datalist>
+        </label>
+        <label class="field">
+          <span>Tamaño: <b id="sub-size-label">100%</b></span>
+          <input id="sub-size" type="range" min="50" max="200" step="5" value="100" />
+        </label>
+        <label class="field">
+          <span>Fondo de la región: <b id="sub-bg-label">62%</b></span>
+          <input id="sub-bg" type="range" min="0" max="100" step="5" value="62" />
+        </label>
         <label class="check">
           <input id="record-file" type="checkbox" />
           <span>Guardar la sesión en un archivo</span>

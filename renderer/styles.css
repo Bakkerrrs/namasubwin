@@ -164,8 +164,12 @@ details .field { margin-top: 8px; }
   background: #000;
 }
 
-/* Capa de subtítulos quemados encima del video */
+/* Capa de subtítulos quemados encima del video.
+   Estilo configurable desde el panel vía variables CSS. */
 #subtitle-layer {
+  --sub-font: "Segoe UI";
+  --sub-scale: 1;
+  --sub-bg-alpha: 0.62;
   position: absolute;
   left: 0;
   right: 0;
@@ -185,19 +189,20 @@ details .field { margin-top: 8px; }
   text-align: center;
   padding: 4px 14px;
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.62);
+  font-family: var(--sub-font), "Segoe UI", system-ui, sans-serif;
+  background: rgba(0, 0, 0, var(--sub-bg-alpha));
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
   white-space: pre-wrap;
 }
 .sub-line.visible { display: block; }
 
 .sub-line.es {
-  font-size: clamp(20px, 3.4vw, 42px);
+  font-size: calc(clamp(20px, 3.4vw, 42px) * var(--sub-scale));
   font-weight: 600;
   color: #fff;
 }
 .sub-line.jp {
-  font-size: clamp(13px, 2vw, 24px);
+  font-size: calc(clamp(13px, 2vw, 24px) * var(--sub-scale));
   color: #ffd9de;
 }
 

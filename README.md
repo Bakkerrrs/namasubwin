@@ -37,7 +37,10 @@ pasado", pero perfectamente subtitulado.
   capturadoras (UVC), y como audio el **loopback del sistema** (lo que suena
   por los parlantes) o cualquier entrada (micrófono, line-in).
 - **Subtítulos quemados** como capa de imagen sobre el video (opcional
-  bilingüe: japonés arriba, español abajo).
+  bilingüe: japonés arriba, español abajo), con **estilo configurable**:
+  fuente (cualquier fuente instalada, con sugerencias occidentales y
+  japonesas), tamaño (50–200 %) y transparencia del fondo de la región
+  (0–100 %). Los cambios se aplican en vivo y quedan guardados.
 - **Reproducción en la misma app**, ventana o pantalla completa con
   **Alt+Enter** (o F11).
 - **Atraso configurable** (5–25 s) con corrección suave de deriva.
