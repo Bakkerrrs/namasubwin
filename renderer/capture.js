@@ -118,3 +118,55 @@ export async function buildStream(video, audio, opts = {}) {
   out.stopAll = () => owned.forEach((t) => t.stop());
   return out;
 }
+
+/**
+ * Recorta la pista de video de `stream` (px por lado) redibujándola en un
+ * canvas cuadro a cuadro. Sirve para quitar la barra de título al capturar
+ * una ventana (Chromium siempre incluye el marco). El recorte queda dentro
+ * del stream: afecta a lo que se ve, se graba y se sube de igual forma.
+ *
+ * @param {MediaStream} stream stream con video (y audio opcional)
+ * @param {object} crop {top, bottom, left, right} en píxeles de la fuente
+ * @returns {MediaStream} nuevo stream con el video recortado + el audio original
+ */
+export function cropStream(stream, crop) {
+  const { top = 0, bottom = 0, left = 0, right = 0 } = crop;
+  if (top + bottom + left + right === 0) return stream;
+
+  const source = document.createElement("video");
+  source.srcObject = new MediaStream(stream.getVideoTracks());
+  source.muted = true;
+  source.play().catch(() => {});
+
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+  let stopped = false;
+
+  const draw = () => {
+    if (stopped) return;
+    // Dimensiones pares: los encoders de video lo exigen.
+    const w = Math.max(2, (source.videoWidth - left - right) & ~1);
+    const h = Math.max(2, (source.videoHeight - top - bottom) & ~1);
+    if (source.videoWidth > 0) {
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+      ctx.drawImage(source, left, top, w, h, 0, 0, w, h);
+    }
+    source.requestVideoFrameCallback(draw);
+  };
+  source.requestVideoFrameCallback(draw);
+
+  const out = canvas.captureStream();
+  stream.getAudioTracks().forEach((t) => out.addTrack(t));
+
+  const original = stream;
+  out.stopAll = () => {
+    stopped = true;
+    out.getVideoTracks().forEach((t) => t.stop());
+    source.srcObject = null;
+    original.stopAll?.();
+  };
+  return out;
+}

@@ -25,6 +25,18 @@
             <option value="">— usar pantalla/ventana seleccionada —</option>
           </select>
         </label>
+        <label class="field">
+          <span>Recorte de la fuente (px): ↑ ↓ ← →</span>
+          <div class="row crop-row">
+            <input id="crop-top" type="number" min="0" max="500" value="0" title="Arriba" />
+            <input id="crop-bottom" type="number" min="0" max="500" value="0" title="Abajo" />
+            <input id="crop-left" type="number" min="0" max="500" value="0" title="Izquierda" />
+            <input id="crop-right" type="number" min="0" max="500" value="0" title="Derecha" />
+          </div>
+        </label>
+        <p class="hint left">Para quitar la barra de título de una ventana,
+          recorta arriba ~35–45 px (más si usas escala de pantalla >100%).
+          Se aplica al pulsar Iniciar.</p>
       </section>
 
       <section>

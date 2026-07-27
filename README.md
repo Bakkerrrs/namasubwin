@@ -36,6 +36,10 @@ pasado", pero perfectamente subtitulado.
 - **Fuentes estilo OBS**: pantallas y ventanas con miniatura, cámaras y
   capturadoras (UVC), y como audio el **loopback del sistema** (lo que suena
   por los parlantes) o cualquier entrada (micrófono, line-in).
+- **Recorte de la fuente** en píxeles por lado — para quitar la barra de
+  título al capturar una ventana (~35–45 px arriba; más con escala de
+  pantalla >100 %) o las barras de control de un reproductor. El recorte va
+  dentro del stream: aplica a la vista y a la grabación.
 - **Subtítulos quemados** como capa de imagen sobre el video (opcional
   bilingüe: japonés arriba, español abajo), con **estilo configurable**:
   fuente (cualquier fuente instalada, con sugerencias occidentales y

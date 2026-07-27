@@ -8,6 +8,7 @@ import {
   listAudioOutputs,
   warmUpPermissions,
   buildStream,
+  cropStream,
 } from "./capture.js";
 import { DelayedPlayer } from "./delaybuffer.js";
 import { RealtimeService, REALTIME_MODELS, fallbackTranslate } from "./realtime.js";
@@ -111,6 +112,12 @@ async function init() {
   if (saved.hdrLevel) $("hdr-level").value = saved.hdrLevel;
   $("hdr-level-label").textContent = $("hdr-level").value;
   applyHdrFilter();
+  if (saved.crop) {
+    $("crop-top").value = saved.crop.top ?? 0;
+    $("crop-bottom").value = saved.crop.bottom ?? 0;
+    $("crop-left").value = saved.crop.left ?? 0;
+    $("crop-right").value = saved.crop.right ?? 0;
+  }
   if (saved.subFont) $("sub-font").value = saved.subFont;
   if (saved.subSize) $("sub-size").value = saved.subSize;
   if (saved.subBg != null) $("sub-bg").value = saved.subBg;
@@ -304,6 +311,11 @@ function wireEvents() {
     prefs.save({ hdrLevel: $("hdr-level").value })
   );
 
+  // Recorte de la fuente: persiste; se aplica al iniciar la sesión.
+  for (const id of ["crop-top", "crop-bottom", "crop-left", "crop-right"]) {
+    $(id).addEventListener("change", () => prefs.save({ crop: currentCrop() }));
+  }
+
   // Estilo de subtítulos: se aplica en vivo y se persiste al soltar el control.
   $("sub-font").addEventListener("input", applySubtitleStyle);
   $("sub-font").addEventListener("change", () =>
@@ -335,6 +347,17 @@ function wireEvents() {
   window.namasub.onFullscreen((isFull) =>
     document.body.classList.toggle("fullscreen", isFull)
   );
+}
+
+function currentCrop() {
+  const value = (id) =>
+    Math.max(0, parseInt($(id).value, 10) || 0);
+  return {
+    top: value("crop-top"),
+    bottom: value("crop-bottom"),
+    left: value("crop-left"),
+    right: value("crop-right"),
+  };
 }
 
 function currentVad() {
@@ -394,6 +417,13 @@ async function start() {
       `${state.stream.getAudioTracks().length} audio ` +
       `(${state.stream.getAudioTracks()[0]?.label || "sin pista de audio"})`
   );
+
+  // Recorte de la fuente (quitar barra de título, bordes, barras de control).
+  const crop = currentCrop();
+  if (crop.top + crop.bottom + crop.left + crop.right > 0) {
+    state.stream = cropStream(state.stream, crop);
+    dbg.log("app", `Recorte aplicado: ${JSON.stringify(crop)}`);
+  }
 
   if (state.stream.getAudioTracks().length === 0) {
     setStatus("⚠ La fuente no entrega audio; revisa el origen de audio");
