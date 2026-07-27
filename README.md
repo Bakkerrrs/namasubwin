@@ -82,6 +82,34 @@ npm start
 4. El video aparece a los N segundos (el globo indica la cuenta) ya
    subtitulado. Alt+Enter para pantalla completa.
 
+## Compilar el ejecutable
+
+El empaquetado usa [electron-builder](https://www.electron.build). En Windows:
+
+```bash
+npm install
+npm run dist
+```
+
+Genera en `dist/`:
+
+- **`NamaSub-Setup-0.1.0.exe`** — instalador (NSIS) con acceso directo en el
+  escritorio y desinstalador; permite elegir la carpeta de instalación.
+- **`NamaSub-Portable-0.1.0.exe`** — ejecutable portable, un solo archivo sin
+  instalación (tarda unos segundos más en arrancar porque se autoextrae).
+
+Para una compilación rápida de prueba sin empaquetar instalador:
+`npm run pack` (deja la app suelta en `dist/win-unpacked/NamaSub.exe`).
+
+Notas:
+
+- El ícono sale de `build/icon.png` (el mismo de la app iOS).
+- Los ejecutables no van firmados; Windows SmartScreen mostrará el aviso
+  "aplicación desconocida" la primera vez (Más información → Ejecutar de
+  todas formas). Firmarlos requiere un certificado de código.
+- La API key y las preferencias del usuario no viajan en el ejecutable: se
+  guardan por-máquina en `%APPDATA%/namasub-win` (cifradas con DPAPI).
+
 ## Pruebas
 
 ```bash

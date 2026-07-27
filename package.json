@@ -7,9 +7,42 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "test": "node --test"
+    "test": "node --test",
+    "pack": "electron-builder --win --dir",
+    "dist": "electron-builder --win"
   },
   "devDependencies": {
-    "electron": "^33.0.0"
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "cl.bakkerrrs.namasub",
+    "productName": "NamaSub",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "NamaSub",
+      "artifactName": "NamaSub-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "NamaSub-Portable-${version}.${ext}"
+    }
   }
 }
