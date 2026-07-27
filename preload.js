@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld("namasub", {
   saveSrt: (text, suggestedName) =>
     ipcRenderer.invoke("srt:save", { text, suggestedName }),
 
+  copyText: (text) => ipcRenderer.invoke("clipboard:write", text),
+  saveLog: (text) => ipcRenderer.invoke("log:save", text),
+
   onFullscreen: (callback) =>
     ipcRenderer.on("fullscreen", (event, isFull) => callback(isFull)),
 });

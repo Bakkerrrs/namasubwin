@@ -19,6 +19,8 @@ export class SubtitleTimeline {
     this.entries = [];
     this._openIndex = -1;     // turno cuyo audio sigue en curso
     this._responseIndex = -1; // turno al que se enrutan los tokens de traducción
+    /** Registro de decisiones internas (para el modo debug de la app). */
+    this.onDebug = () => {};
   }
 
   // ------------------------------------------------------------------
@@ -26,6 +28,20 @@ export class SubtitleTimeline {
   // ------------------------------------------------------------------
 
   speechStarted(ms) {
+    // Recolección de turnos "fantasma": un turno cerrado que nunca recibió
+    // transcripción (ruido) quedaría para siempre como "el más antiguo sin
+    // traducir" y secuestraría las traducciones de los turnos siguientes,
+    // que aterrizarían en una ventana de tiempo ya pasada (subs invisibles).
+    // Gracia de 10 s: la transcripción de un turno recién cerrado puede
+    // tardar un par de segundos en llegar y no hay que descartarlo antes.
+    this.entries.forEach((e, i) => {
+      const stale = e.endMs != null && ms - e.endMs > 10_000;
+      if (!e.done && stale && !e.japanese && !e.spanish) {
+        e.done = true;
+        this.onDebug(`turno #${i} vacío (ruido) descartado`);
+      }
+    });
+
     this.entries.push({
       startMs: ms,
       endMs: null,
@@ -34,6 +50,7 @@ export class SubtitleTimeline {
       done: false,
     });
     this._openIndex = this.entries.length - 1;
+    this.onDebug(`turno #${this._openIndex} abre @${Math.round(ms)}ms`);
   }
 
   speechStopped(ms) {
@@ -44,10 +61,12 @@ export class SubtitleTimeline {
   }
 
   inputTranscript(text) {
-    // Las transcripciones llegan en orden: van al turno más antiguo sin texto.
-    const i = this.entries.findIndex((e) => !e.japanese);
+    // Las transcripciones llegan en orden: van al turno abierto más antiguo
+    // sin texto (los descartados por la recolección ya no compiten).
+    const i = this.entries.findIndex((e) => !e.japanese && !e.done);
     if (i >= 0) {
       this.entries[i].japanese = text;
+      this.onDebug(`transcripción → turno #${i}: "${text.slice(0, 40)}"`);
       return this.entries[i];
     }
     // Transcripción sin speech_started previo (no debería pasar): crea entrada.
@@ -65,6 +84,7 @@ export class SubtitleTimeline {
     // Los tokens van al turno más antiguo que aún no tiene traducción.
     this._responseIndex = this.entries.findIndex((e) => !e.spanish && !e.done);
     if (this._responseIndex < 0) this._responseIndex = this.entries.length - 1;
+    this.onDebug(`respuesta → turno #${this._responseIndex}`);
   }
 
   outputTextDelta(token) {
@@ -78,7 +98,12 @@ export class SubtitleTimeline {
 
   responseCompleted() {
     if (this._responseIndex >= 0 && this._responseIndex < this.entries.length) {
-      this.entries[this._responseIndex].done = true;
+      const e = this.entries[this._responseIndex];
+      e.done = true;
+      this.onDebug(
+        `turno #${this._responseIndex} listo [${Math.round(e.startMs ?? -1)}–` +
+          `${Math.round(e.endMs ?? -1)}ms] jp:${e.japanese.length} es:${e.spanish.length}`
+      );
     }
     this._responseIndex = -1;
   }

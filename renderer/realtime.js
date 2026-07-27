@@ -39,9 +39,17 @@ export class RealtimeService {
     /** Callback de depuración: (dirección "tx"|"rx"|"ws", detalle) => void. */
     this.onDebug = () => {};
     this._audioChunksSent = 0;
+
+    // Reconexión automática: las sesiones Realtime tienen duración máxima y
+    // la red puede cortarse; sin esto los subtítulos morían en silencio.
+    this.autoReconnect = true;
+    this._manualClose = false;
+    this._reconnectDelayMs = 1000;
+    this._reconnectTimer = 0;
   }
 
   connect() {
+    this._manualClose = false;
     const url = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this.model)}`;
     // El navegador no permite headers en WebSocket: la Realtime API acepta la
     // key por subprotocolo (openai-insecure-api-key), pensado justo para esto.
@@ -55,6 +63,7 @@ export class RealtimeService {
 
     this.ws.onopen = () => {
       this.onDebug("ws", `Conectado (subprotocolo: ${this.ws.protocol || "—"})`);
+      this._reconnectDelayMs = 1000; // conexión sana: reinicia el backoff
       this._sendSessionUpdate();
       this.onEvent("connected");
     };
@@ -66,10 +75,24 @@ export class RealtimeService {
     this.ws.onclose = (event) => {
       this.onDebug("ws", `Cerrado: código ${event.code} ${event.reason || ""}`);
       this.onEvent("disconnected");
+      this._scheduleReconnect();
     };
   }
 
+  _scheduleReconnect() {
+    if (this._manualClose || !this.autoReconnect) return;
+    const delay = this._reconnectDelayMs;
+    this._reconnectDelayMs = Math.min(delay * 2, 15000);
+    this.onDebug("ws", `Reconectando en ${delay} ms…`);
+    clearTimeout(this._reconnectTimer);
+    this._reconnectTimer = setTimeout(() => {
+      if (!this._manualClose) this.connect();
+    }, delay);
+  }
+
   disconnect() {
+    this._manualClose = true;
+    clearTimeout(this._reconnectTimer);
     if (this.ws) {
       this.ws.onclose = null;
       this.ws.close(1000);

@@ -92,6 +92,27 @@ test("las transcripciones en backlog van al turno más antiguo sin texto", () =>
   assert.equal(t.entries[1].japanese, "二番");
 });
 
+test("un turno de ruido sin transcripción no secuestra traducciones futuras", () => {
+  const t = new SubtitleTimeline();
+  // Turno fantasma: VAD abre y cierra, pero nunca llega transcripción.
+  t.speechStarted(1000);
+  t.speechStopped(1500);
+
+  // Turno real posterior: al abrir, el fantasma debe quedar descartado.
+  t.speechStarted(60000);
+  t.speechStopped(63000);
+  t.inputTranscript("本物");
+  t.responseStarted();
+  t.outputTextDelta("Real");
+  t.responseCompleted();
+
+  // La traducción aterrizó en el turno real (ventana vigente), no en el ruido.
+  assert.equal(t.entries[0].spanish, "");
+  assert.ok(t.entries[0].done);
+  assert.equal(t.entries[1].spanish, "Real");
+  assert.equal(t.activeAt(61000)?.spanish, "Real");
+});
+
 test("pendingFallback detecta turnos transcritos sin traducción", () => {
   const t = new SubtitleTimeline();
   t.speechStarted(1000);

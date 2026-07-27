@@ -5,6 +5,7 @@
 const {
   app,
   BrowserWindow,
+  clipboard,
   desktopCapturer,
   dialog,
   ipcMain,
@@ -154,6 +155,25 @@ ipcMain.handle("rec:stop", async () => {
   if (!recStream) return;
   await new Promise((resolve) => recStream.end(resolve));
   recStream = null;
+});
+
+// Copiado desde el proceso principal: navigator.clipboard del renderer queda
+// bloqueado por el handler de permisos de la ventana.
+ipcMain.handle("clipboard:write", (event, text) => {
+  clipboard.writeText(String(text ?? ""));
+  return true;
+});
+
+ipcMain.handle("log:save", async (event, text) => {
+  const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: "Guardar registro de depuración",
+    defaultPath: path.join(app.getPath("documents"), `namasub-debug-${stamp}.txt`),
+    filters: [{ name: "Texto", extensions: ["txt"] }],
+  });
+  if (canceled || !filePath) return null;
+  fs.writeFileSync(filePath, String(text ?? ""), "utf-8");
+  return filePath;
 });
 
 ipcMain.handle("srt:save", async (event, { text, suggestedName }) => {

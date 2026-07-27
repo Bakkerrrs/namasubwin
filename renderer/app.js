@@ -59,6 +59,10 @@ const state = {
   renderTimer: 0,
   debugTimer: 0,
   apiKeyFromEnv: false,
+  // El reloj de VAD del servidor (audio_start_ms) parte de 0 en CADA sesión
+  // WebSocket; tras una reconexión hay que sumarle el tiempo de captura ya
+  // transcurrido para seguir fechando bien los subtítulos.
+  sessionBaseMs: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -338,8 +342,14 @@ function wireEvents() {
     }
   });
   $("btn-copy-log").addEventListener("click", async () => {
-    await navigator.clipboard.writeText(dbg.text());
+    // Vía IPC del proceso principal: navigator.clipboard está bloqueado por
+    // el handler de permisos de la ventana.
+    await window.namasub.copyText(dbg.text());
     setStatus("Registro copiado al portapapeles");
+  });
+  $("btn-save-log").addEventListener("click", async () => {
+    const path = await window.namasub.saveLog(dbg.text());
+    if (path) setStatus(`Registro guardado: ${path}`);
   });
 
   $("btn-export-srt").addEventListener("click", exportSrt);
@@ -441,6 +451,8 @@ async function start() {
 
   // Línea de tiempo + Realtime
   state.timeline = new SubtitleTimeline();
+  state.timeline.onDebug = (msg) => dbg.log("subs", msg);
+  state.sessionBaseMs = 0;
   state.realtime = new RealtimeService({ apiKey, model: $("model-select").value, ...vadOpts() });
   state.realtime.onEvent = handleRealtimeEvent;
   state.realtime.onDebug = (tag, msg) => dbg.log(tag, msg);
@@ -563,13 +575,26 @@ function handleRealtimeEvent(type, payload) {
   }
   switch (type) {
     case "connected":
+      // Nueva sesión (inicio o reconexión): su reloj de audio parte de 0.
+      state.sessionBaseMs = state.player?.captureTimeMs() ?? 0;
+      if (state.sessionBaseMs > 0) {
+        dbg.log("app", `Sesión reconectada; base de tiempo ${Math.round(state.sessionBaseMs)}ms`);
+      }
       if (state.running) setStatus("🎧 Escuchando…");
       break;
     case "speechStarted":
-      t.speechStarted(payload ?? state.player?.captureTimeMs() ?? 0);
+      t.speechStarted(
+        payload != null
+          ? payload + state.sessionBaseMs
+          : state.player?.captureTimeMs() ?? 0
+      );
       break;
     case "speechStopped":
-      t.speechStopped(payload ?? state.player?.captureTimeMs() ?? 0);
+      t.speechStopped(
+        payload != null
+          ? payload + state.sessionBaseMs
+          : state.player?.captureTimeMs() ?? 0
+      );
       break;
     case "inputTranscript":
       if (payload) t.inputTranscript(payload); // ignora transcripciones vacías (ruido)
