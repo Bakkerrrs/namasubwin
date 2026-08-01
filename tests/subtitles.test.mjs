@@ -92,6 +92,18 @@ test("las transcripciones en backlog van al turno más antiguo sin texto", () =>
   assert.equal(t.entries[1].japanese, "二番");
 });
 
+test("una transcripción sin turno libre se fecha tras el último tiempo conocido", () => {
+  const t = new SubtitleTimeline();
+  makeTurn(t, { start: 1000, end: 4000, jp: "一", es: "Uno" });
+  // Llega otra transcripción sin speech_started que la respalde.
+  const entry = t.inputTranscript("迷子の字幕");
+  assert.equal(entry.startMs, 4000);
+  assert.equal(entry.endMs, 6000);
+  // Es visible (no queda huérfana sin ventana); sin traducción aún, el
+  // japonés ocupa la línea principal.
+  assert.equal(t.activeAt(4500)?.spanish, "迷子の字幕");
+});
+
 test("un turno de ruido sin transcripción no secuestra traducciones futuras", () => {
   const t = new SubtitleTimeline();
   // Turno fantasma: VAD abre y cierra, pero nunca llega transcripción.

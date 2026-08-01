@@ -69,14 +69,28 @@ export class SubtitleTimeline {
       this.onDebug(`transcripción → turno #${i}: "${text.slice(0, 40)}"`);
       return this.entries[i];
     }
-    // Transcripción sin speech_started previo (no debería pasar): crea entrada.
+    // Transcripción sin turno libre (p. ej. llegó antes que su speech_started,
+    // o el emparejamiento se desfasó): crea una entrada fechada a continuación
+    // del último tiempo conocido para que al menos se muestre.
+    let startMs = null;
+    for (let j = this.entries.length - 1; j >= 0; j--) {
+      const known = this.entries[j].endMs ?? this.entries[j].startMs;
+      if (known != null) {
+        startMs = known;
+        break;
+      }
+    }
     this.entries.push({
-      startMs: null,
-      endMs: null,
+      startMs,
+      endMs: startMs != null ? startMs + 2000 : null,
       japanese: text,
       spanish: "",
       done: false,
     });
+    this.onDebug(
+      `transcripción sin turno libre → entrada nueva #${this.entries.length - 1} ` +
+        `@${startMs == null ? "sin fecha" : Math.round(startMs) + "ms"}: "${text.slice(0, 40)}"`
+    );
     return this.entries[this.entries.length - 1];
   }
 

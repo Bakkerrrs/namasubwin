@@ -67,6 +67,8 @@ const state = {
   // WebSocket; tras una reconexión hay que sumarle el tiempo de captura ya
   // transcurrido para seguir fechando bien los subtítulos.
   sessionBaseMs: 0,
+  lastSpeechStartMs: 0, // inicio del turno local en curso (para el commit)
+  deltaCount: 0,        // deltas de transcripción recibidos (visibilidad debug)
 };
 
 // ---------------------------------------------------------------------------
@@ -642,12 +644,22 @@ async function startAudioPipe() {
     dbg.lastRms = Math.sqrt(sum / (samples.length / 8)) / 32768;
 
     // Motor Live-Transcribe: el VAD local fecha los turnos con el reloj de
-    // captura (el servidor no manda speech_started/stopped en este modo).
+    // captura Y cierra el buffer de audio del servidor (sin VAD de servidor,
+    // nadie más hace commit y el modelo nunca emitiría transcripciones).
     if (state.localVad && state.timeline) {
       const nowMs = state.player?.captureTimeMs() ?? 0;
       const vadEvent = state.localVad.update(dbg.lastRms, nowMs);
-      if (vadEvent?.type === "start") state.timeline.speechStarted(vadEvent.ms);
-      else if (vadEvent?.type === "stop") state.timeline.speechStopped(vadEvent.ms);
+      if (vadEvent?.type === "start") {
+        state.timeline.speechStarted(vadEvent.ms);
+        state.lastSpeechStartMs = vadEvent.ms;
+      } else if (vadEvent?.type === "stop") {
+        state.timeline.speechStopped(vadEvent.ms);
+        // Turnos de ≥250 ms: los más cortos son ruido y el commit de un
+        // buffer casi vacío provoca errores del servidor.
+        if (vadEvent.ms - (state.lastSpeechStartMs ?? 0) >= 250) {
+          state.realtime?.commitAudio();
+        }
+      }
     }
 
     state.realtime?.sendAudio(event.data);
@@ -698,6 +710,13 @@ function handleRealtimeEvent(type, payload) {
         // Motor Live-Transcribe: cada turno japonés completado va a la cola
         // de traducción (en el clásico traduce la propia sesión realtime).
         state.translator?.push(payload);
+      }
+      break;
+    case "inputTranscriptDelta":
+      // Solo visibilidad: confirma en el debug que la transcripción fluye.
+      state.deltaCount += 1;
+      if (state.deltaCount === 1 || state.deltaCount % 25 === 0) {
+        dbg.log("rx", `transcripción fluyendo (${state.deltaCount} deltas)`);
       }
       break;
     case "responseStarted":

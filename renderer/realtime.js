@@ -132,6 +132,14 @@ export class RealtimeService {
     }
   }
 
+  /** Cierra el turno de audio en curso (modo transcripción sin VAD de
+   *  servidor: si nadie hace commit, el modelo nunca emite transcripciones).
+   *  Lo invoca el VAD local al detectar el fin de cada turno de voz. */
+  commitAudio() {
+    if (this.mode !== "transcribe") return;
+    this._send({ type: "input_audio_buffer.commit" });
+  }
+
   /** Actualiza los parámetros de VAD en caliente (sin reconectar).
    *  En modo transcripción no hay VAD de servidor (lo lleva el VAD local). */
   updateVAD({ threshold, prefixMs, silenceMs }) {
@@ -219,7 +227,10 @@ export class RealtimeService {
         if (obj.transcript) this.onEvent("inputTranscript", obj.transcript.trim());
         break;
       case "conversation.item.input_audio_transcription.delta":
-        break; // parciales: el completed trae el turno entero (y saturarían el debug)
+        // Parciales: el completed trae el turno entero. Se emiten para que la
+        // app confirme en debug que la transcripción fluye (throttled allá).
+        if (obj.delta) this.onEvent("inputTranscriptDelta", obj.delta);
+        break;
       case "response.created":
         this.onEvent("responseStarted");
         break;
