@@ -13,6 +13,7 @@ import {
 import { DelayedPlayer } from "./delaybuffer.js";
 import { RealtimeService, REALTIME_MODELS, fallbackTranslate } from "./realtime.js";
 import { TranslationQueue, TRANSLATE_MODELS } from "./translator.js";
+import { LocalVad } from "./localvad.js";
 import { SubtitleTimeline } from "./subtitles.js";
 
 const $ = (id) => document.getElementById(id);
@@ -53,6 +54,7 @@ const state = {
   player: null,         // DelayedPlayer
   realtime: null,       // RealtimeService (traducción o transcripción según motor)
   translator: null,     // TranslationQueue (solo motor livetranscribe)
+  localVad: null,       // LocalVad (solo motor livetranscribe: fecha los turnos)
   timeline: null,       // SubtitleTimeline
   audioCtx: null,
   workletNode: null,
@@ -292,7 +294,7 @@ function wireEvents() {
     prefs.save({ bilingual: $("bilingual").checked })
   );
 
-  // VAD en caliente, como applyVAD() en iOS
+  // VAD en caliente, como applyVAD() en iOS (server o local según motor)
   for (const id of ["vad-threshold", "vad-prefix", "vad-silence"]) {
     $(id).addEventListener("change", () => {
       prefs.save({
@@ -301,6 +303,7 @@ function wireEvents() {
         vadSilence: $("vad-silence").value,
       });
       state.realtime?.updateVAD(currentVad());
+      state.localVad?.configure(localVadOpts());
     });
   }
 
@@ -415,6 +418,17 @@ function currentVad() {
   };
 }
 
+/** Traduce los sliders de VAD (pensados para el server_vad 0..1) a los
+ *  parámetros del VAD local por RMS: 0.5 en el slider ≈ RMS 0.03. */
+function localVadOpts() {
+  const v = currentVad();
+  return {
+    threshold: v.threshold * 0.06,
+    prefixMs: v.prefixMs,
+    silenceMs: Math.max(250, v.silenceMs),
+  };
+}
+
 function setStatus(text) {
   $("status").textContent = text;
 }
@@ -515,7 +529,10 @@ async function start() {
     state.translator.onToken = (token) => handleRealtimeEvent("outputTextDelta", token);
     state.translator.onCompleted = () => handleRealtimeEvent("responseCompleted");
     state.translator.onError = (msg) => handleRealtimeEvent("error", msg);
-    dbg.log("app", `Motor: gpt-live-transcribe (delay=${$("lt-delay").value}) + ${state.translator.model}`);
+    // gpt-live-transcribe no acepta VAD de servidor: los turnos se fechan
+    // con un VAD local por energía sobre el mismo audio que va a la API.
+    state.localVad = new LocalVad(localVadOpts());
+    dbg.log("app", `Motor: gpt-live-transcribe (delay=${$("lt-delay").value}) + ${state.translator.model}, VAD local`);
   } else {
     state.realtime = new RealtimeService({ apiKey, model: $("model-select").value, ...vadOpts() });
     dbg.log("app", `Motor: realtime clásico (${$("model-select").value})`);
@@ -572,6 +589,7 @@ async function stop() {
   state.realtime = null;
   state.translator?.stop();
   state.translator = null;
+  state.localVad = null;
 
   if (state.workletNode) {
     state.workletNode.disconnect();
@@ -622,6 +640,16 @@ async function startAudioPipe() {
     let sum = 0;
     for (let i = 0; i < samples.length; i += 8) sum += samples[i] * samples[i];
     dbg.lastRms = Math.sqrt(sum / (samples.length / 8)) / 32768;
+
+    // Motor Live-Transcribe: el VAD local fecha los turnos con el reloj de
+    // captura (el servidor no manda speech_started/stopped en este modo).
+    if (state.localVad && state.timeline) {
+      const nowMs = state.player?.captureTimeMs() ?? 0;
+      const vadEvent = state.localVad.update(dbg.lastRms, nowMs);
+      if (vadEvent?.type === "start") state.timeline.speechStarted(vadEvent.ms);
+      else if (vadEvent?.type === "stop") state.timeline.speechStopped(vadEvent.ms);
+    }
+
     state.realtime?.sendAudio(event.data);
   };
   dbg.log("app", `Pipe de audio listo (AudioContext ${state.audioCtx.sampleRate} Hz)`);

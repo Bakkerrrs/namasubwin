@@ -132,11 +132,13 @@ export class RealtimeService {
     }
   }
 
-  /** Actualiza los parámetros de VAD en caliente (sin reconectar). */
+  /** Actualiza los parámetros de VAD en caliente (sin reconectar).
+   *  En modo transcripción no hay VAD de servidor (lo lleva el VAD local). */
   updateVAD({ threshold, prefixMs, silenceMs }) {
     this.vadThreshold = threshold;
     this.vadPrefixMs = prefixMs;
     this.vadSilenceMs = silenceMs;
+    if (this.mode === "transcribe") return;
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this._sendSessionUpdate();
     }
@@ -176,6 +178,8 @@ export class RealtimeService {
       // gpt-live-transcribe acepta contexto para mejorar la precisión:
       // prompt libre, keywords literales, idiomas esperados y el knob
       // delay (más alto = más preciso; el buffer diferido lo absorbe).
+      // OJO: turn_detection debe ir en null — el modelo segmenta solo y
+      // rechaza el VAD de servidor; los timestamps salen del VAD local.
       const transcription = {
         model: this.transcribeModel,
         languages: this.languages,
@@ -185,7 +189,7 @@ export class RealtimeService {
       if (this.keywords.length > 0) transcription.keywords = this.keywords;
       return {
         format: { type: "audio/pcm", rate: 24000 },
-        turn_detection: turnDetection,
+        turn_detection: null,
         transcription,
       };
     }
