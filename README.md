@@ -11,6 +11,24 @@ audio → transcripción → traducción por la **Realtime API** de OpenAI. Lo q
 iOS es imposible (capturar el audio del sistema), en Windows es el modo por
 defecto.
 
+## Motores de transliteración
+
+En el panel *OpenAI → Motor de transliteración* hay dos motores; corre solo
+el seleccionado:
+
+- **Realtime todo-en-uno (clásico)**: una sesión `gpt-realtime` transcribe y
+  traduce con instrucciones de traductor. Es el motor original.
+- **GPT-Live-Transcribe + traductor (nuevo)**: una sesión de solo
+  transcripción con `gpt-live-transcribe` (jul-2026, mejor japonés con música
+  y ruido de fondo, $0.017/min) + traducción por REST en streaming con
+  contexto rodante de 5 frases (`gpt-5.6-luna` por defecto). Opciones extra:
+  - **Precisión (delay)**: `minimal`→`xhigh`. Como el video ya va diferido,
+    `high`/`xhigh` compran precisión sin costo perceptible — sube el atraso
+    del video si usas `xhigh`.
+  - **Contexto**: descripción libre del audio ("programa de variedades…").
+  - **Keywords**: nombres propios y términos del programa, separados por
+    coma — mejoran mucho los nombres en japonés.
+
 ## Cómo resuelve la sincronía (video diferido)
 
 La transcripción + traducción tardan unos segundos en llegar. En vez de mostrar

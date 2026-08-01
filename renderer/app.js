@@ -12,6 +12,7 @@ import {
 } from "./capture.js";
 import { DelayedPlayer } from "./delaybuffer.js";
 import { RealtimeService, REALTIME_MODELS, fallbackTranslate } from "./realtime.js";
+import { TranslationQueue, TRANSLATE_MODELS } from "./translator.js";
 import { SubtitleTimeline } from "./subtitles.js";
 
 const $ = (id) => document.getElementById(id);
@@ -50,7 +51,8 @@ const state = {
   selectedSource: null, // {kind:"screen"|"window", id} de la grilla
   stream: null,
   player: null,         // DelayedPlayer
-  realtime: null,       // RealtimeService
+  realtime: null,       // RealtimeService (traducción o transcripción según motor)
+  translator: null,     // TranslationQueue (solo motor livetranscribe)
   timeline: null,       // SubtitleTimeline
   audioCtx: null,
   workletNode: null,
@@ -90,12 +92,18 @@ const prefs = {
 // ---------------------------------------------------------------------------
 
 async function init() {
-  // Modelos Realtime
+  // Modelos Realtime (motor clásico) y de traducción (motor Live-Transcribe)
   for (const model of REALTIME_MODELS) {
     const opt = document.createElement("option");
     opt.value = model;
     opt.textContent = model;
     $("model-select").appendChild(opt);
+  }
+  for (const model of TRANSLATE_MODELS) {
+    const opt = document.createElement("option");
+    opt.value = model;
+    opt.textContent = model;
+    $("translate-model-select").appendChild(opt);
   }
 
   // Preferencias guardadas
@@ -103,6 +111,14 @@ async function init() {
   if (saved.model && REALTIME_MODELS.includes(saved.model)) {
     $("model-select").value = saved.model;
   }
+  if (saved.engine) $("engine-select").value = saved.engine;
+  if (saved.translateModel && TRANSLATE_MODELS.includes(saved.translateModel)) {
+    $("translate-model-select").value = saved.translateModel;
+  }
+  if (saved.ltDelay) $("lt-delay").value = saved.ltDelay;
+  if (saved.ltPrompt) $("lt-prompt").value = saved.ltPrompt;
+  if (saved.ltKeywords) $("lt-keywords").value = saved.ltKeywords;
+  applyEngineVisibility();
   if (saved.delay) $("delay").value = saved.delay;
   if (saved.vadThreshold) $("vad-threshold").value = saved.vadThreshold;
   if (saved.vadPrefix) $("vad-prefix").value = saved.vadPrefix;
@@ -315,6 +331,20 @@ function wireEvents() {
     prefs.save({ hdrLevel: $("hdr-level").value })
   );
 
+  // Motor de transliteración y sus opciones (persisten; aplican al iniciar).
+  $("engine-select").addEventListener("change", () => {
+    prefs.save({ engine: $("engine-select").value });
+    applyEngineVisibility();
+  });
+  $("translate-model-select").addEventListener("change", () =>
+    prefs.save({ translateModel: $("translate-model-select").value })
+  );
+  $("lt-delay").addEventListener("change", () => prefs.save({ ltDelay: $("lt-delay").value }));
+  $("lt-prompt").addEventListener("change", () => prefs.save({ ltPrompt: $("lt-prompt").value }));
+  $("lt-keywords").addEventListener("change", () =>
+    prefs.save({ ltKeywords: $("lt-keywords").value })
+  );
+
   // Recorte de la fuente: persiste; se aplica al iniciar la sesión.
   for (const id of ["crop-top", "crop-bottom", "crop-left", "crop-right"]) {
     $(id).addEventListener("change", () => prefs.save({ crop: currentCrop() }));
@@ -357,6 +387,13 @@ function wireEvents() {
   window.namasub.onFullscreen((isFull) =>
     document.body.classList.toggle("fullscreen", isFull)
   );
+}
+
+/** Muestra las opciones del motor seleccionado y oculta las del otro. */
+function applyEngineVisibility() {
+  const lt = $("engine-select").value === "livetranscribe";
+  $("engine-lt-opts").classList.toggle("hidden", !lt);
+  $("engine-realtime-opts").classList.toggle("hidden", lt);
 }
 
 function currentCrop() {
@@ -449,11 +486,40 @@ async function start() {
     if (!state.recordingPath) $("record-file").checked = false;
   }
 
-  // Línea de tiempo + Realtime
+  // Línea de tiempo + motor de transliteración
   state.timeline = new SubtitleTimeline();
   state.timeline.onDebug = (msg) => dbg.log("subs", msg);
   state.sessionBaseMs = 0;
-  state.realtime = new RealtimeService({ apiKey, model: $("model-select").value, ...vadOpts() });
+
+  const engine = $("engine-select").value;
+  if (engine === "livetranscribe") {
+    // Motor nuevo: sesión de solo transcripción (gpt-live-transcribe) +
+    // traductor REST secuencial con contexto rodante, como en la app iOS.
+    const keywords = $("lt-keywords").value
+      .split(",")
+      .map((k) => k.trim())
+      .filter(Boolean);
+    state.realtime = new RealtimeService({
+      apiKey,
+      mode: "transcribe",
+      delay: $("lt-delay").value,
+      prompt: $("lt-prompt").value.trim(),
+      keywords,
+      ...vadOpts(),
+    });
+    state.translator = new TranslationQueue(apiKey, $("translate-model-select").value);
+    state.translator.onDebug = (msg) => dbg.log("trad", msg);
+    // La cola emite el mismo ciclo de eventos que las respuestas del motor
+    // clásico: la línea de tiempo no distingue quién traduce.
+    state.translator.onStarted = () => handleRealtimeEvent("responseStarted");
+    state.translator.onToken = (token) => handleRealtimeEvent("outputTextDelta", token);
+    state.translator.onCompleted = () => handleRealtimeEvent("responseCompleted");
+    state.translator.onError = (msg) => handleRealtimeEvent("error", msg);
+    dbg.log("app", `Motor: gpt-live-transcribe (delay=${$("lt-delay").value}) + ${state.translator.model}`);
+  } else {
+    state.realtime = new RealtimeService({ apiKey, model: $("model-select").value, ...vadOpts() });
+    dbg.log("app", `Motor: realtime clásico (${$("model-select").value})`);
+  }
   state.realtime.onEvent = handleRealtimeEvent;
   state.realtime.onDebug = (tag, msg) => dbg.log(tag, msg);
   state.realtime.connect();
@@ -504,6 +570,8 @@ async function stop() {
 
   state.realtime?.disconnect();
   state.realtime = null;
+  state.translator?.stop();
+  state.translator = null;
 
   if (state.workletNode) {
     state.workletNode.disconnect();
@@ -597,7 +665,12 @@ function handleRealtimeEvent(type, payload) {
       );
       break;
     case "inputTranscript":
-      if (payload) t.inputTranscript(payload); // ignora transcripciones vacías (ruido)
+      if (payload) {
+        t.inputTranscript(payload); // ignora transcripciones vacías (ruido)
+        // Motor Live-Transcribe: cada turno japonés completado va a la cola
+        // de traducción (en el clásico traduce la propia sesión realtime).
+        state.translator?.push(payload);
+      }
       break;
     case "responseStarted":
       t.responseStarted();

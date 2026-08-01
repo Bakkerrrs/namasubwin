@@ -67,9 +67,44 @@
           </div>
         </label>
         <label class="field">
-          <span>Modelo Realtime</span>
-          <select id="model-select"></select>
+          <span>Motor de transliteración</span>
+          <select id="engine-select">
+            <option value="realtime">Realtime todo-en-uno (clásico)</option>
+            <option value="livetranscribe">GPT-Live-Transcribe + traductor (nuevo)</option>
+          </select>
         </label>
+        <div id="engine-realtime-opts">
+          <label class="field">
+            <span>Modelo Realtime</span>
+            <select id="model-select"></select>
+          </label>
+        </div>
+        <div id="engine-lt-opts" class="hidden">
+          <label class="field">
+            <span>Modelo de traducción</span>
+            <select id="translate-model-select"></select>
+          </label>
+          <label class="field">
+            <span>Precisión de transcripción (delay)</span>
+            <select id="lt-delay">
+              <option value="minimal">minimal — mínima latencia</option>
+              <option value="low">low</option>
+              <option value="medium">medium</option>
+              <option value="high" selected>high — recomendado (el diferido lo absorbe)</option>
+              <option value="xhigh">xhigh — máxima precisión</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Contexto del audio (opcional)</span>
+            <input id="lt-prompt" type="text"
+                   placeholder="ej: programa de variedades japonés" />
+          </label>
+          <label class="field">
+            <span>Keywords (opcional, separadas por coma)</span>
+            <input id="lt-keywords" type="text"
+                   placeholder="ej: 中島健人, DayDay, 日テレ" />
+          </label>
+        </div>
       </section>
 
       <section>

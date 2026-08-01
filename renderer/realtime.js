@@ -19,11 +19,21 @@ agregues comentarios: devuelve solo la traducción.`;
 
 export class RealtimeService {
   /**
-   * @param {object} opts {apiKey, model, vadThreshold, vadPrefixMs, vadSilenceMs}
+   * @param {object} opts
+   *   {apiKey, model, vadThreshold, vadPrefixMs, vadSilenceMs,
+   *    mode: "translate" (clásico: el modelo realtime traduce) |
+   *          "transcribe" (sesión de solo transcripción con gpt-live-transcribe),
+   *    transcribeModel, languages, prompt, keywords, delay}   // solo mode transcribe
    */
   constructor(opts) {
     this.apiKey = opts.apiKey;
     this.model = opts.model || REALTIME_MODELS[0];
+    this.mode = opts.mode || "translate";
+    this.transcribeModel = opts.transcribeModel || "gpt-live-transcribe";
+    this.languages = opts.languages || ["ja"];
+    this.contextPrompt = opts.prompt || "";
+    this.keywords = opts.keywords || [];
+    this.delay = opts.delay || "high";
     this.vadThreshold = opts.vadThreshold ?? 0.5;
     this.vadPrefixMs = opts.vadPrefixMs ?? 200;
     this.vadSilenceMs = opts.vadSilenceMs ?? 250;
@@ -50,7 +60,12 @@ export class RealtimeService {
 
   connect() {
     this._manualClose = false;
-    const url = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this.model)}`;
+    // Modo transcripción: sesión dedicada (intent=transcription), el modelo
+    // va en el session.update. Modo clásico: el modelo va en la URL.
+    const url =
+      this.mode === "transcribe"
+        ? "wss://api.openai.com/v1/realtime?intent=transcription"
+        : `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this.model)}`;
     // El navegador no permite headers en WebSocket: la Realtime API acepta la
     // key por subprotocolo (openai-insecure-api-key), pensado justo para esto.
     // OJO: sin el subprotocolo beta — los payloads son del formato GA, el
@@ -128,6 +143,16 @@ export class RealtimeService {
   }
 
   _sendSessionUpdate() {
+    if (this.mode === "transcribe") {
+      this._send({
+        type: "session.update",
+        session: {
+          type: "transcription",
+          audio: { input: this._audioInputConfig() },
+        },
+      });
+      return;
+    }
     this._send({
       type: "session.update",
       session: {
@@ -140,15 +165,34 @@ export class RealtimeService {
   }
 
   _audioInputConfig() {
+    const turnDetection = {
+      type: "server_vad",
+      threshold: this.vadThreshold,
+      prefix_padding_ms: this.vadPrefixMs,
+      silence_duration_ms: this.vadSilenceMs,
+    };
+
+    if (this.mode === "transcribe") {
+      // gpt-live-transcribe acepta contexto para mejorar la precisión:
+      // prompt libre, keywords literales, idiomas esperados y el knob
+      // delay (más alto = más preciso; el buffer diferido lo absorbe).
+      const transcription = {
+        model: this.transcribeModel,
+        languages: this.languages,
+        delay: this.delay,
+      };
+      if (this.contextPrompt) transcription.prompt = this.contextPrompt;
+      if (this.keywords.length > 0) transcription.keywords = this.keywords;
+      return {
+        format: { type: "audio/pcm", rate: 24000 },
+        turn_detection: turnDetection,
+        transcription,
+      };
+    }
+
     return {
       format: { type: "audio/pcm", rate: 24000 },
-      turn_detection: {
-        type: "server_vad",
-        threshold: this.vadThreshold,
-        prefix_padding_ms: this.vadPrefixMs,
-        silence_duration_ms: this.vadSilenceMs,
-        create_response: true,
-      },
+      turn_detection: { ...turnDetection, create_response: true },
       transcription: { model: "gpt-4o-mini-transcribe", language: "ja" },
     };
   }
@@ -170,6 +214,8 @@ export class RealtimeService {
       case "conversation.item.input_audio_transcription.completed":
         if (obj.transcript) this.onEvent("inputTranscript", obj.transcript.trim());
         break;
+      case "conversation.item.input_audio_transcription.delta":
+        break; // parciales: el completed trae el turno entero (y saturarían el debug)
       case "response.created":
         this.onEvent("responseStarted");
         break;
