@@ -104,6 +104,27 @@ test("una transcripción sin turno libre se fecha tras el último tiempo conocid
   assert.equal(t.activeAt(4500)?.spanish, "迷子の字幕");
 });
 
+test("inputTranscriptAt asigna al turno con la ventana exacta, no al más antiguo", () => {
+  const t = new SubtitleTimeline();
+  // Turno de ruido viejo (sin transcripción) y turno real posterior.
+  t.speechStarted(1000);
+  t.speechStopped(1600);
+  t.speechStarted(8000);
+  t.speechStopped(12000);
+
+  // La transcripción llega con la ventana exacta del segundo turno.
+  t.inputTranscriptAt(8000, 12000, "本当の字幕");
+  assert.equal(t.entries[0].japanese, ""); // el ruido no la secuestró
+  assert.equal(t.entries[1].japanese, "本当の字幕");
+
+  // Si el turno ya no existe, se crea la entrada con esa ventana.
+  t.inputTranscriptAt(20000, 22000, "新しい");
+  const last = t.entries[t.entries.length - 1];
+  assert.equal(last.startMs, 20000);
+  assert.equal(last.endMs, 22000);
+  assert.equal(last.japanese, "新しい");
+});
+
 test("un turno de ruido sin transcripción no secuestra traducciones futuras", () => {
   const t = new SubtitleTimeline();
   // Turno fantasma: VAD abre y cierra, pero nunca llega transcripción.

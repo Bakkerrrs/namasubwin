@@ -224,7 +224,17 @@ export class RealtimeService {
         this.onEvent("speechStopped", obj.audio_end_ms ?? null);
         break;
       case "conversation.item.input_audio_transcription.completed":
-        if (obj.transcript) this.onEvent("inputTranscript", obj.transcript.trim());
+        if (obj.transcript) {
+          this.onEvent("inputTranscript", {
+            text: obj.transcript.trim(),
+            itemId: obj.item_id || null,
+          });
+        }
+        break;
+      case "input_audio_buffer.committed":
+        // Permite mapear cada commit del VAD local a su item del servidor
+        // (emparejamiento exacto de ventanas de tiempo).
+        this.onEvent("bufferCommitted", obj.item_id || null);
         break;
       case "conversation.item.input_audio_transcription.delta":
         // Parciales: el completed trae el turno entero. Se emiten para que la

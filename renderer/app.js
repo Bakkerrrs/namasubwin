@@ -69,6 +69,9 @@ const state = {
   sessionBaseMs: 0,
   lastSpeechStartMs: 0, // inicio del turno local en curso (para el commit)
   deltaCount: 0,        // deltas de transcripción recibidos (visibilidad debug)
+  // Emparejamiento exacto commit→item→transcripción (motor Live-Transcribe):
+  pendingCommits: [],       // ventanas [start,end] de commits sin item_id aún
+  itemWindows: new Map(),   // item_id → ventana del turno local que lo produjo
 };
 
 // ---------------------------------------------------------------------------
@@ -506,6 +509,9 @@ async function start() {
   state.timeline = new SubtitleTimeline();
   state.timeline.onDebug = (msg) => dbg.log("subs", msg);
   state.sessionBaseMs = 0;
+  state.pendingCommits = [];
+  state.itemWindows = new Map();
+  state.deltaCount = 0;
 
   const engine = $("engine-select").value;
   if (engine === "livetranscribe") {
@@ -657,6 +663,12 @@ async function startAudioPipe() {
         // Turnos de ≥250 ms: los más cortos son ruido y el commit de un
         // buffer casi vacío provoca errores del servidor.
         if (vadEvent.ms - (state.lastSpeechStartMs ?? 0) >= 250) {
+          // Registra la ventana del turno que este commit cierra: el server
+          // responderá con un item_id y la transcripción llegará con él.
+          state.pendingCommits.push({
+            startMs: state.lastSpeechStartMs ?? 0,
+            endMs: vadEvent.ms,
+          });
           state.realtime?.commitAudio();
         }
       }
@@ -676,9 +688,13 @@ async function startAudioPipe() {
 function handleRealtimeEvent(type, payload) {
   const t = state.timeline;
   if (!t) return;
-  if (type !== "outputTextDelta") {
+  if (type !== "outputTextDelta" && type !== "inputTranscriptDelta") {
     const detail =
-      typeof payload === "string" ? payload.slice(0, 120) : payload ?? "";
+      typeof payload === "string"
+        ? payload.slice(0, 120)
+        : payload == null
+          ? ""
+          : JSON.stringify(payload).slice(0, 120);
     dbg.log("evt", `${type} ${detail}`);
   }
   switch (type) {
@@ -704,14 +720,29 @@ function handleRealtimeEvent(type, payload) {
           : state.player?.captureTimeMs() ?? 0
       );
       break;
-    case "inputTranscript":
-      if (payload) {
-        t.inputTranscript(payload); // ignora transcripciones vacías (ruido)
-        // Motor Live-Transcribe: cada turno japonés completado va a la cola
-        // de traducción (en el clásico traduce la propia sesión realtime).
-        state.translator?.push(payload);
-      }
+    case "bufferCommitted": {
+      // Empareja el commit más antiguo pendiente con el item que creó.
+      const win = state.pendingCommits.shift();
+      if (win && payload) state.itemWindows.set(payload, win);
       break;
+    }
+    case "inputTranscript": {
+      const text = typeof payload === "string" ? payload : payload?.text;
+      if (!text) break; // ignora transcripciones vacías (ruido)
+      const itemId = typeof payload === "object" ? payload?.itemId : null;
+      const win = itemId ? state.itemWindows.get(itemId) : null;
+      if (win) {
+        // Emparejamiento exacto por item_id (motor Live-Transcribe).
+        t.inputTranscriptAt(win.startMs, win.endMs, text);
+        state.itemWindows.delete(itemId);
+      } else {
+        t.inputTranscript(text);
+      }
+      // Motor Live-Transcribe: cada turno japonés completado va a la cola
+      // de traducción (en el clásico traduce la propia sesión realtime).
+      state.translator?.push(text);
+      break;
+    }
     case "inputTranscriptDelta":
       // Solo visibilidad: confirma en el debug que la transcripción fluye.
       state.deltaCount += 1;

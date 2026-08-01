@@ -40,7 +40,11 @@ export function buildTranslationPayload(model, context, japanese) {
       { role: "system", content: SYSTEM_PROMPT },
       {
         role: "user",
-        content: `Contexto previo de la conversación:\n${contextStr}\n\nTraduce al español:\n${japanese}`,
+        content:
+          `Contexto previo de la conversación (SOLO referencia, no lo traduzcas ` +
+          `ni lo repitas):\n${contextStr}\n\n` +
+          `Traduce al español ÚNICAMENTE este texto y responde solo con su ` +
+          `traducción:\n${japanese}`,
       },
     ],
     max_completion_tokens: 500,

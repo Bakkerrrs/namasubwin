@@ -94,6 +94,42 @@ export class SubtitleTimeline {
     return this.entries[this.entries.length - 1];
   }
 
+  /**
+   * Asigna una transcripción a la entrada cuya ventana de tiempo se conoce
+   * con exactitud (el commit del VAD local sabe qué turno cerró y el servidor
+   * devuelve la transcripción con el mismo item_id). Elimina el desfase del
+   * emparejamiento "al más antiguo" cuando el VAD abre turnos de ruido.
+   */
+  inputTranscriptAt(startMs, endMs, text) {
+    const i = this.entries.findIndex(
+      (e) =>
+        e.startMs != null &&
+        Math.abs(e.startMs - startMs) < 1 &&
+        !e.japanese &&
+        !e.done
+    );
+    if (i >= 0) {
+      this.entries[i].japanese = text;
+      if (this.entries[i].endMs == null) this.entries[i].endMs = endMs;
+      this.onDebug(`transcripción exacta → turno #${i}: "${text.slice(0, 40)}"`);
+      return this.entries[i];
+    }
+    // La entrada del turno ya no existe (no debería pasar): créala con la
+    // ventana conocida.
+    this.entries.push({
+      startMs,
+      endMs,
+      japanese: text,
+      spanish: "",
+      done: false,
+    });
+    this.onDebug(
+      `transcripción exacta sin turno → entrada nueva #${this.entries.length - 1} ` +
+        `[${Math.round(startMs)}–${Math.round(endMs)}ms]`
+    );
+    return this.entries[this.entries.length - 1];
+  }
+
   responseStarted() {
     // Los tokens van al turno más antiguo que aún no tiene traducción.
     this._responseIndex = this.entries.findIndex((e) => !e.spanish && !e.done);

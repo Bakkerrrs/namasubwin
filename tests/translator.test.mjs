@@ -25,7 +25,7 @@ test("el contexto previo viaja en el prompt del usuario", () => {
   const p = buildTranslationPayload("gpt-5.6-luna", context, "三");
   assert.match(p.messages[1].content, /JP: 一\nES: Uno/);
   assert.match(p.messages[1].content, /JP: 二\nES: Dos/);
-  assert.match(p.messages[1].content, /Traduce al español:\n三/);
+  assert.match(p.messages[1].content, /ÚNICAMENTE este texto[^]*\n三/);
 });
 
 test("la lista de modelos tiene a gpt-5.6-luna como recomendado", () => {
