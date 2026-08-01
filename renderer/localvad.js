@@ -14,25 +14,32 @@ export class LocalVad {
    *   threshold  RMS mínimo para considerar voz (0..1, típico 0.02-0.05)
    *   prefixMs   cuánto retroceder el inicio detectado (ataques suaves)
    *   silenceMs  silencio continuo que cierra el turno
+   *   maxTurnMs  duración máxima de un turno: el habla continua sin pausas
+   *              se parte a la fuerza (misma idea que translateMaxSeconds
+   *              en la app iOS) para acotar la latencia del subtítulo
    */
   constructor(opts = {}) {
     this.configure(opts);
     this.speaking = false;
     this._lastVoiceMs = null;
+    this._turnStartMs = null;
   }
 
-  configure({ threshold, prefixMs, silenceMs } = {}) {
+  configure({ threshold, prefixMs, silenceMs, maxTurnMs } = {}) {
     if (threshold != null) this.threshold = threshold;
     if (prefixMs != null) this.prefixMs = prefixMs;
     if (silenceMs != null) this.silenceMs = silenceMs;
+    if (maxTurnMs != null) this.maxTurnMs = maxTurnMs;
     this.threshold ??= 0.03;
     this.prefixMs ??= 200;
     this.silenceMs ??= 350;
+    this.maxTurnMs ??= 7000;
   }
 
   reset() {
     this.speaking = false;
     this._lastVoiceMs = null;
+    this._turnStartMs = null;
   }
 
   /**
@@ -48,7 +55,14 @@ export class LocalVad {
       this._lastVoiceMs = nowMs;
       if (!this.speaking) {
         this.speaking = true;
-        return { type: "start", ms: Math.max(0, nowMs - this.prefixMs) };
+        this._turnStartMs = Math.max(0, nowMs - this.prefixMs);
+        return { type: "start", ms: this._turnStartMs };
+      }
+      // Habla continua sin pausas: corta el turno al llegar al máximo (el
+      // siguiente bloque con voz abrirá uno nuevo de inmediato).
+      if (this._turnStartMs != null && nowMs - this._turnStartMs >= this.maxTurnMs) {
+        this.speaking = false;
+        return { type: "stop", ms: nowMs, forced: true };
       }
       return null;
     }

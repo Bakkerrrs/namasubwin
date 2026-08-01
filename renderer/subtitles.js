@@ -166,12 +166,14 @@ export class SubtitleTimeline {
     }
   }
 
-  /** Turnos con japonés pero sin traducción (candidatos al respaldo). */
+  /** Turnos con japonés pero sin traducción (candidatos al respaldo).
+   *  Excluye los que ya están en la cola de traducción (translating). */
   pendingFallback(nowMs, graceMs = 2000) {
     return this.entries.filter(
       (e) =>
         e.japanese &&
         !e.spanish &&
+        !e.translating &&
         e.endMs != null &&
         nowMs - e.endMs > graceMs
     );

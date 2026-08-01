@@ -34,6 +34,18 @@ test("micro-pausas dentro del turno no lo cortan", () => {
   assert.equal(stop.ms, 1300);
 });
 
+test("el habla continua se parte a la fuerza al llegar al máximo", () => {
+  const vad = new LocalVad({ threshold: 0.03, prefixMs: 0, silenceMs: 350, maxTurnMs: 7000 });
+  vad.update(0.08, 1000); // start
+  assert.equal(vad.update(0.08, 5000), null);       // dentro del máximo
+  const cut = vad.update(0.08, 8100);               // 7.1 s de habla continua
+  assert.equal(cut.type, "stop");
+  assert.ok(cut.forced);
+  // El siguiente bloque con voz abre un turno nuevo de inmediato.
+  const next = vad.update(0.08, 8200);
+  assert.equal(next.type, "start");
+});
+
 test("el inicio nunca es negativo y configure ajusta en caliente", () => {
   const vad = new LocalVad({ threshold: 0.03, prefixMs: 500, silenceMs: 350 });
   const start = vad.update(0.1, 100);

@@ -531,12 +531,30 @@ async function start() {
     });
     state.translator = new TranslationQueue(apiKey, $("translate-model-select").value);
     state.translator.onDebug = (msg) => dbg.log("trad", msg);
-    // La cola emite el mismo ciclo de eventos que las respuestas del motor
-    // clásico: la línea de tiempo no distingue quién traduce.
-    state.translator.onStarted = () => handleRealtimeEvent("responseStarted");
-    state.translator.onToken = (token) => handleRealtimeEvent("outputTextDelta", token);
-    state.translator.onCompleted = () => handleRealtimeEvent("responseCompleted");
-    state.translator.onError = (msg) => handleRealtimeEvent("error", msg);
+    // Cada traducción escribe DIRECTAMENTE en la entrada de su turno (ref):
+    // sin heurística de enrutamiento, imposible que caiga en el turno vecino.
+    state.translator.onStarted = (jp, entry) => {
+      if (state.running) setStatus("🌐 Traduciendo…");
+    };
+    state.translator.onToken = (token, entry) => {
+      if (entry) entry.spanish += token;
+    };
+    state.translator.onCompleted = (jp, full, entry) => {
+      if (entry) {
+        entry.done = true;
+        entry.translating = false;
+        dbg.log(
+          "subs",
+          `turno listo [${Math.round(entry.startMs ?? -1)}–${Math.round(entry.endMs ?? -1)}ms] ` +
+            `jp:${entry.japanese.length} es:${entry.spanish.length}`
+        );
+      }
+      if (state.running) setStatus("🎧 Escuchando…");
+    };
+    state.translator.onError = (msg, entry) => {
+      if (entry) entry.translating = false; // el respaldo podrá reintentar
+      handleRealtimeEvent("error", msg);
+    };
     // gpt-live-transcribe no acepta VAD de servidor: los turnos se fechan
     // con un VAD local por energía sobre el mismo audio que va a la API.
     state.localVad = new LocalVad(localVadOpts());
@@ -731,16 +749,20 @@ function handleRealtimeEvent(type, payload) {
       if (!text) break; // ignora transcripciones vacías (ruido)
       const itemId = typeof payload === "object" ? payload?.itemId : null;
       const win = itemId ? state.itemWindows.get(itemId) : null;
+      let entry;
       if (win) {
         // Emparejamiento exacto por item_id (motor Live-Transcribe).
-        t.inputTranscriptAt(win.startMs, win.endMs, text);
+        entry = t.inputTranscriptAt(win.startMs, win.endMs, text);
         state.itemWindows.delete(itemId);
       } else {
-        t.inputTranscript(text);
+        entry = t.inputTranscript(text);
       }
-      // Motor Live-Transcribe: cada turno japonés completado va a la cola
-      // de traducción (en el clásico traduce la propia sesión realtime).
-      state.translator?.push(text);
+      // Motor Live-Transcribe: el turno va a la cola de traducción con la
+      // referencia de SU entrada (en el clásico traduce la sesión realtime).
+      if (state.translator && entry) {
+        entry.translating = true;
+        state.translator.push(text, entry);
+      }
       break;
     }
     case "inputTranscriptDelta":

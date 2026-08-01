@@ -75,11 +75,13 @@ export class TranslationQueue {
     this.onDebug = () => {};
   }
 
-  /** Encola un turno japonés para traducir (FIFO, uno a la vez). */
-  push(japanese) {
+  /** Encola un turno japonés para traducir (FIFO, uno a la vez).
+   *  `ref` viaja intacto hasta los callbacks: permite escribir la traducción
+   *  directamente en SU entrada de la línea de tiempo, sin heurísticas. */
+  push(japanese, ref = null) {
     const text = (japanese || "").trim();
     if (!text) return;
-    this._queue.push(text);
+    this._queue.push({ text, ref });
     this.onDebug(`en cola: ${this._queue.length} turno(s)`);
     this._drain();
   }
@@ -91,21 +93,21 @@ export class TranslationQueue {
 
   async _drain() {
     if (this._busy || this._stopped) return;
-    const japanese = this._queue.shift();
-    if (japanese == null) return;
+    const job = this._queue.shift();
+    if (job == null) return;
     this._busy = true;
     try {
-      await this._translate(japanese);
+      await this._translate(job.text, job.ref);
     } catch (err) {
       this.onDebug(`traducción falló: ${err.message}`);
-      this.onError(err.message);
+      this.onError(err.message, job.ref);
     }
     this._busy = false;
     this._drain();
   }
 
-  async _translate(japanese) {
-    this.onStarted(japanese);
+  async _translate(japanese, ref) {
+    this.onStarted(japanese, ref);
     const payload = buildTranslationPayload(this.model, this.context, japanese);
 
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -140,7 +142,7 @@ export class TranslationQueue {
           const token = JSON.parse(data).choices?.[0]?.delta?.content;
           if (token) {
             full += token;
-            this.onToken(token);
+            this.onToken(token, ref);
           }
         } catch {
           /* fragmento no-JSON: ignorar */
@@ -152,6 +154,6 @@ export class TranslationQueue {
     if (this.context.length > CONTEXT_LIMIT) {
       this.context.splice(0, this.context.length - CONTEXT_LIMIT);
     }
-    this.onCompleted(japanese, full.trim());
+    this.onCompleted(japanese, full.trim(), ref);
   }
 }
