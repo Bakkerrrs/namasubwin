@@ -89,6 +89,11 @@ export class DelayedPlayer {
       if (this.onChunk) this.onChunk(buf);
     };
 
+    // Resampleo simple al variar playbackRate (±2% es inaudible en tono):
+    // el time-stretching por defecto genera artefactos tipo clipping que
+    // los DAC de TV por HDMI delatan especialmente.
+    this.video.preservesPitch = false;
+
     this._recorder.start(250);
     this._startedAt = performance.now();
     this._armPlayback();
