@@ -153,20 +153,26 @@ export function cropStream(stream, crop) {
   const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
   let stopped = false;
 
+  // Las dimensiones del canvas se fijan con el PRIMER cuadro y no cambian:
+  // un cambio de resolución a mitad de stream (ventana redimensionada)
+  // puede matar el decoder MSE y congelar la reproducción. Si la fuente
+  // cambia de tamaño, se escala al lienzo original.
   const draw = () => {
     if (stopped) return;
-    // Dimensiones pares: los encoders de video lo exigen.
-    const w = Math.max(2, (source.videoWidth - left - right) & ~1);
-    const h = Math.max(2, (source.videoHeight - top - bottom) & ~1);
     if (source.videoWidth > 0) {
-      if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w;
-        canvas.height = h;
+      if (canvas.width <= 2) {
+        // Dimensiones pares: los encoders de video lo exigen.
+        canvas.width = Math.max(2, (source.videoWidth - left - right) & ~1);
+        canvas.height = Math.max(2, (source.videoHeight - top - bottom) & ~1);
       }
-      ctx.drawImage(source, left, top, w, h, 0, 0, w, h);
+      const sw = Math.max(2, source.videoWidth - left - right);
+      const sh = Math.max(2, source.videoHeight - top - bottom);
+      ctx.drawImage(source, left, top, sw, sh, 0, 0, canvas.width, canvas.height);
     }
     source.requestVideoFrameCallback(draw);
   };
+  canvas.width = 2;
+  canvas.height = 2;
   source.requestVideoFrameCallback(draw);
 
   const out = canvas.captureStream();

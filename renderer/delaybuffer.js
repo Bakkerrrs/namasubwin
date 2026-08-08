@@ -61,6 +61,9 @@ export class DelayedPlayer {
     this._playing = false;
     this._stopped = false;
     this._driftTimer = 0;
+    this._appendRetries = 0;   // reintentos del chunk actual
+    this._lastMediaMs = -1;    // watchdog de congelamiento
+    this._stallTicks = 0;
   }
 
   /** Milisegundos transcurridos desde el inicio de la captura (reloj vivo). */
@@ -85,6 +88,15 @@ export class DelayedPlayer {
     this._sourceBuffer = this._mediaSource.addSourceBuffer(mime);
     this._sourceBuffer.mode = "sequence";
     this._sourceBuffer.addEventListener("updateend", () => this._flushQueue());
+    this._sourceBuffer.addEventListener("error", () =>
+      this.onState("error:sourcebuffer")
+    );
+
+    // Errores fatales del decodificador/elemento: repórtalos, no congeles.
+    this.video.addEventListener("error", () => {
+      const err = this.video.error;
+      this.onState(`error:video:${err ? `${err.code} ${err.message || ""}` : "?"}`);
+    });
 
     this._recorder = new MediaRecorder(this.stream, {
       mimeType: mime,
@@ -123,10 +135,24 @@ export class DelayedPlayer {
     const chunk = this._queue.shift();
     try {
       this._sourceBuffer.appendBuffer(chunk);
+      this._appendRetries = 0;
     } catch (err) {
-      // QuotaExceeded: conserva el chunk, purga lo ya reproducido y reintenta.
-      this._queue.unshift(chunk);
-      this._evictPlayed();
+      if (err && err.name === "QuotaExceededError") {
+        // Buffer lleno: conserva el chunk, purga lo reproducido y reintenta.
+        this._queue.unshift(chunk);
+        this._evictPlayed();
+        return;
+      }
+      // Error no recuperable en este chunk: reintenta un par de veces y si
+      // persiste descártalo — un chunk perdido es un parpadeo; el reintento
+      // infinito era un congelamiento permanente.
+      this._appendRetries += 1;
+      if (this._appendRetries <= 2) {
+        this._queue.unshift(chunk);
+      } else {
+        this._appendRetries = 0;
+        this.onState(`error:append:${err?.name || "?"} (chunk descartado)`);
+      }
     }
   }
 
@@ -155,6 +181,7 @@ export class DelayedPlayer {
    */
   _correctDrift() {
     if (!this._playing || this._stopped) return;
+    this._watchdog();
     const lag = this.captureTimeMs() - this.mediaTimeMs();
     const target = this.delayMs;
     // Corrección suave (±2%): cambios mayores de playbackRate producen
@@ -167,6 +194,33 @@ export class DelayedPlayer {
       this.video.playbackRate = 1.0;
     }
     this._evictPlayed();
+  }
+
+  /** Detección y recuperación de congelamientos: si el video no avanza
+   *  durante ~3 s mientras la captura sigue viva, salta hacia el borde del
+   *  buffer y reanuda, en vez de quedarse pegado para siempre. */
+  _watchdog() {
+    const mediaMs = this.mediaTimeMs();
+    if (mediaMs !== this._lastMediaMs) {
+      this._lastMediaMs = mediaMs;
+      this._stallTicks = 0;
+      return;
+    }
+    this._stallTicks += 1;
+    if (this._stallTicks < 3) return;
+    this._stallTicks = 0;
+
+    const buffered = this.video.buffered;
+    if (buffered.length > 0) {
+      const end = buffered.end(buffered.length - 1);
+      const stuckAt = this.video.currentTime;
+      if (end - stuckAt > 0.5) {
+        // Hay datos por delante: salta el tramo dañado.
+        this.video.currentTime = Math.max(stuckAt + 0.3, end - this.delayMs / 1000);
+      }
+    }
+    this.video.play().catch(() => {});
+    this.onState(`stall:recuperando @${(this.video.currentTime).toFixed(1)}s`);
   }
 
   _evictPlayed() {

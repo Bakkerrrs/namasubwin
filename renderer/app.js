@@ -903,6 +903,14 @@ function updateDebugStats() {
 
 function onPlayerState(stateTxt) {
   const badge = $("buffer-badge");
+  // Errores y recuperaciones del reproductor: al registro (y estado si es grave).
+  if (stateTxt.startsWith("error:") || stateTxt.startsWith("stall:")) {
+    dbg.log("player", stateTxt);
+    if (stateTxt.startsWith("error:video")) {
+      setStatus(`⚠ Reproductor: ${stateTxt.slice(6)}`);
+    }
+    return;
+  }
   if (stateTxt.startsWith("buffering:")) {
     const remaining = Math.ceil(parseInt(stateTxt.split(":")[1], 10) / 1000);
     badge.textContent = `⏳ Diferido: el video comienza en ${remaining} s`;
