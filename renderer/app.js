@@ -139,6 +139,8 @@ async function init() {
   if (saved.hdrLevel) $("hdr-level").value = saved.hdrLevel;
   $("hdr-level-label").textContent = $("hdr-level").value;
   applyHdrFilter();
+  if (saved.playerVolume) $("player-volume").value = saved.playerVolume;
+  applyPlayerVolume();
   if (saved.crop) {
     $("crop-top").value = saved.crop.top ?? 0;
     $("crop-bottom").value = saved.crop.bottom ?? 0;
@@ -266,6 +268,13 @@ function applyHdrFilter() {
     `saturate(${saturate}) contrast(${contrast}) brightness(${brightness})`;
 }
 
+/** Aplica el volumen del reproductor (headroom contra clipping en HDMI). */
+function applyPlayerVolume() {
+  const value = parseInt($("player-volume").value, 10);
+  $("player").volume = Math.min(1, Math.max(0.1, value / 100));
+  $("player-volume-label").textContent = `${value}%`;
+}
+
 /** Enruta el audio del reproductor diferido a la salida elegida. */
 async function applyOutputDevice() {
   const deviceId = $("output-select").value;
@@ -324,6 +333,12 @@ function wireEvents() {
     prefs.save({ outputDevice: $("output-select").value });
     await applyOutputDevice();
   });
+
+  // Volumen del reproductor: headroom contra el clipping de DACs de TV (HDMI).
+  $("player-volume").addEventListener("input", applyPlayerVolume);
+  $("player-volume").addEventListener("change", () =>
+    prefs.save({ playerVolume: $("player-volume").value })
+  );
 
   // Corrección de color para capturas de escritorios HDR (solo afecta la
   // visualización en la app, no lo que se guarda en el WebM).
@@ -802,7 +817,16 @@ async function runFallback() {
     const es = await fallbackTranslate(apiKey, entry.japanese);
     entry.spanish = "";
     state.timeline.fillFallback(entry, es);
-    if (!es) entry.done = true; // no insistir con esta línea
+    if (es) {
+      dbg.log(
+        "trad",
+        `respaldo llenó turno [${Math.round(entry.startMs ?? -1)}–` +
+          `${Math.round(entry.endMs ?? -1)}ms] jp:${entry.japanese.length} es:${es.length}`
+      );
+    } else {
+      entry.done = true; // no insistir con esta línea
+      dbg.log("trad", `respaldo falló para: "${entry.japanese.slice(0, 30)}"`);
+    }
   }
 }
 

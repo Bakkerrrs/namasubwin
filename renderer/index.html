@@ -55,6 +55,12 @@
         </label>
         <p class="hint left">Con loopback, elige aquí una salida <b>distinta</b>
           (auriculares, HDMI…) para que la app no capture su propio audio.</p>
+        <label class="field">
+          <span>Volumen del reproductor: <b id="player-volume-label">100%</b></span>
+          <input id="player-volume" type="range" min="10" max="100" step="5" value="100" />
+        </label>
+        <p class="hint left">Si oyes clipping en un TV por HDMI, baja a ~85%
+          (deja headroom para los picos del audio).</p>
       </section>
 
       <section>

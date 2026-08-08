@@ -141,10 +141,12 @@ export class DelayedPlayer {
     if (!this._playing || this._stopped) return;
     const lag = this.captureTimeMs() - this.mediaTimeMs();
     const target = this.delayMs;
+    // Corrección suave (±2%): cambios mayores de playbackRate producen
+    // artefactos audibles en algunos receptores HDMI al resamplear.
     if (lag > target + 1500) {
-      this.video.playbackRate = 1.05;
+      this.video.playbackRate = 1.02;
     } else if (lag < target - 500) {
-      this.video.playbackRate = 0.95;
+      this.video.playbackRate = 0.98;
     } else {
       this.video.playbackRate = 1.0;
     }
