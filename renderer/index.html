@@ -34,6 +34,14 @@
           </select>
         </label>
         <label class="field">
+          <span>Códec de video</span>
+          <select id="video-codec">
+            <option value="vp9" selected>VP9 (recomendado)</option>
+            <option value="h264">H.264 (hardware, experimental)</option>
+            <option value="vp8">VP8 (compatibilidad)</option>
+          </select>
+        </label>
+        <label class="field">
           <span>Recorte de la fuente (px): ↑ ↓ ← →</span>
           <div class="row crop-row">
             <input id="crop-top" type="number" min="0" max="500" value="0" title="Arriba" />

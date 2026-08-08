@@ -12,20 +12,26 @@
 // captura: currentTime == 0 es el instante en que se pulsó Iniciar. Esa es la
 // base de tiempo con la que se fechan los subtítulos.
 
-// H.264 primero: en Windows se codifica por hardware (Media Foundation),
-// mientras que VP9/VP8 van por software y ahogan la CPU con fuentes 4K.
-const MIME_CANDIDATES = [
-  'video/mp4;codecs="avc1.640028,opus"',
-  'video/mp4;codecs="avc1.42E01E,opus"',
-  'video/webm;codecs="vp9,opus"',
-  'video/webm;codecs="vp8,opus"',
-  "video/webm",
-];
+// Candidatos por códec preferido. VP9 es el default: el H.264 de
+// MediaRecorder en muchos equipos usa OpenH264 por software (pensado para
+// videollamadas), que a 1080p30 descarta cuadros — video entrecortado con
+// audio perfecto. H.264 queda como opción para equipos donde Chromium sí
+// enganche el encoder por hardware de Media Foundation.
+const MIME_BY_CODEC = {
+  vp9: ['video/webm;codecs="vp9,opus"', 'video/webm;codecs="vp8,opus"', "video/webm"],
+  h264: [
+    'video/mp4;codecs="avc1.640028,opus"',
+    'video/mp4;codecs="avc1.42E01E,opus"',
+    'video/webm;codecs="vp9,opus"',
+  ],
+  vp8: ['video/webm;codecs="vp8,opus"', "video/webm"],
+};
 
-export function pickMime(hasAudio) {
+export function pickMime(hasAudio, codec = "vp9") {
+  const base = MIME_BY_CODEC[codec] || MIME_BY_CODEC.vp9;
   const candidates = hasAudio
-    ? MIME_CANDIDATES
-    : MIME_CANDIDATES.map((m) => m.replace(",opus", "").replace(";codecs=\"\"", ""));
+    ? base
+    : base.map((m) => m.replace(",opus", "").replace(';codecs=""', ""));
   for (const mime of candidates) {
     if (MediaRecorder.isTypeSupported(mime) && MediaSource.isTypeSupported(mime)) {
       return mime;

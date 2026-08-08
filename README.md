@@ -184,10 +184,13 @@ por aplicación* de Windows, sin instalar nada.
 
 ## Rendimiento en 4K y TVs por HDMI
 
-- **Códec**: la app prefiere **H.264** (codificado por hardware en Windows) y
-  cae a VP9/VP8 por software solo si no está disponible. El códec de cada
-  sesión aparece en el registro de debug (`Códec de la sesión: …`), junto al
-  estado de la GPU (`GPU: decode=… encode=…`).
+- **Códec**: VP9 por defecto (parejo y confiable a 1080p). H.264 está
+  disponible como opción *experimental*: cuando Chromium engancha el encoder
+  por hardware de Media Foundation es más liviano, pero en muchos equipos
+  MediaRecorder usa OpenH264 por software (pensado para videollamadas) y el
+  video sale entrecortado — si lo pruebas y se ve mal, vuelve a VP9. El códec
+  de cada sesión aparece en el registro de debug (`Códec de la sesión: …`),
+  junto al estado de la GPU (`GPU: decode=… encode=…`).
 - **Calidad de captura**: por defecto la fuente se captura a **1080p** aunque
   la pantalla sea 4K — para leer subtítulos no aporta capturar 2160p y
   cuadruplica la carga de encoding (video entrecortado y deriva). "Nativa"

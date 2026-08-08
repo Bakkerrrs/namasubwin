@@ -140,6 +140,7 @@ async function init() {
   $("hdr-level-label").textContent = $("hdr-level").value;
   applyHdrFilter();
   if (saved.captureQuality != null) $("capture-quality").value = saved.captureQuality;
+  if (saved.videoCodec) $("video-codec").value = saved.videoCodec;
   if (saved.playerVolume) $("player-volume").value = saved.playerVolume;
   applyPlayerVolume();
   if (saved.crop) {
@@ -384,6 +385,9 @@ function wireEvents() {
   $("capture-quality").addEventListener("change", () =>
     prefs.save({ captureQuality: $("capture-quality").value })
   );
+  $("video-codec").addEventListener("change", () =>
+    prefs.save({ videoCodec: $("video-codec").value })
+  );
 
   // Recorte de la fuente: persiste; se aplica al iniciar la sesión.
   for (const id of ["crop-top", "crop-bottom", "crop-left", "crop-right"]) {
@@ -531,8 +535,10 @@ async function start() {
     return;
   }
 
-  // Códec: H.264 si hay encoder por hardware disponible; VP9/VP8 si no.
-  const mimeType = pickMime(state.stream.getAudioTracks().length > 0);
+  const mimeType = pickMime(
+    state.stream.getAudioTracks().length > 0,
+    $("video-codec").value
+  );
   dbg.log("app", `Códec de la sesión: ${mimeType}`);
 
   // Grabación a archivo (opcional)
