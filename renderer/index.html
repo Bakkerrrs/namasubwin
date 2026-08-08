@@ -26,6 +26,14 @@
           </select>
         </label>
         <label class="field">
+          <span>Calidad de captura</span>
+          <select id="capture-quality">
+            <option value="1080" selected>1080p (recomendado)</option>
+            <option value="1440">1440p</option>
+            <option value="0">Nativa (pantallas 4K: mucha más carga)</option>
+          </select>
+        </label>
+        <label class="field">
           <span>Recorte de la fuente (px): ↑ ↓ ← →</span>
           <div class="row crop-row">
             <input id="crop-top" type="number" min="0" max="500" value="0" title="Arriba" />

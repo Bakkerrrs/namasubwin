@@ -182,6 +182,22 @@ También puedes enrutar solo la app de origen (navegador, reproductor) a otro
 dispositivo desde *Configuración → Sistema → Sonido → Preferencias de volumen
 por aplicación* de Windows, sin instalar nada.
 
+## Rendimiento en 4K y TVs por HDMI
+
+- **Códec**: la app prefiere **H.264** (codificado por hardware en Windows) y
+  cae a VP9/VP8 por software solo si no está disponible. El códec de cada
+  sesión aparece en el registro de debug (`Códec de la sesión: …`), junto al
+  estado de la GPU (`GPU: decode=… encode=…`).
+- **Calidad de captura**: por defecto la fuente se captura a **1080p** aunque
+  la pantalla sea 4K — para leer subtítulos no aporta capturar 2160p y
+  cuadruplica la carga de encoding (video entrecortado y deriva). "Nativa"
+  queda disponible para quien la necesite.
+- **Lipsync en TVs**: los televisores añaden 50–150 ms de procesamiento de
+  video. Si el audio de la app sale por otro lado (parlantes del PC) mientras
+  el video va al TV, se desincronizan. Soluciones: activa el **modo juego**
+  del TV, o envía también el audio de la app al TV por HDMI (el televisor
+  compensa internamente su propio retraso).
+
 ## Pantallas HDR (imagen lavada / sin color)
 
 Cuando Windows compone el escritorio en **HDR**, la captura de pantalla llega

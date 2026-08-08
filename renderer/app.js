@@ -10,7 +10,7 @@ import {
   buildStream,
   cropStream,
 } from "./capture.js";
-import { DelayedPlayer } from "./delaybuffer.js";
+import { DelayedPlayer, pickMime, extensionForMime } from "./delaybuffer.js";
 import { RealtimeService, REALTIME_MODELS, fallbackTranslate } from "./realtime.js";
 import { TranslationQueue, TRANSLATE_MODELS } from "./translator.js";
 import { LocalVad } from "./localvad.js";
@@ -139,6 +139,7 @@ async function init() {
   if (saved.hdrLevel) $("hdr-level").value = saved.hdrLevel;
   $("hdr-level-label").textContent = $("hdr-level").value;
   applyHdrFilter();
+  if (saved.captureQuality != null) $("capture-quality").value = saved.captureQuality;
   if (saved.playerVolume) $("player-volume").value = saved.playerVolume;
   applyPlayerVolume();
   if (saved.crop) {
@@ -162,6 +163,18 @@ async function init() {
   await warmUpPermissions();
   await refreshSources();
   wireEvents();
+
+  // Estado de la aceleración GPU, visible en el registro de debug.
+  try {
+    const gpu = await window.namasub.getGpuStatus();
+    dbg.log(
+      "app",
+      `GPU: decode=${gpu.video_decode || "?"} encode=${gpu.video_encode || "?"} ` +
+        `compositing=${gpu.gpu_compositing || "?"}`
+    );
+  } catch {
+    /* sin datos de GPU */
+  }
 }
 
 function syncSliderLabels() {
@@ -368,6 +381,10 @@ function wireEvents() {
     prefs.save({ ltKeywords: $("lt-keywords").value })
   );
 
+  $("capture-quality").addEventListener("change", () =>
+    prefs.save({ captureQuality: $("capture-quality").value })
+  );
+
   // Recorte de la fuente: persiste; se aplica al iniciar la sesión.
   for (const id of ["crop-top", "crop-bottom", "crop-left", "crop-right"]) {
     $(id).addEventListener("change", () => prefs.save({ crop: currentCrop() }));
@@ -484,6 +501,7 @@ async function start() {
   try {
     state.stream = await buildStream(video, audio, {
       desktopAudioId: state.selectedSource?.id,
+      maxHeight: parseInt($("capture-quality").value, 10) || 0,
     });
   } catch (err) {
     dbg.log("app", `buildStream falló: ${err.name}: ${err.message}`);
@@ -513,10 +531,16 @@ async function start() {
     return;
   }
 
+  // Códec: H.264 si hay encoder por hardware disponible; VP9/VP8 si no.
+  const mimeType = pickMime(state.stream.getAudioTracks().length > 0);
+  dbg.log("app", `Códec de la sesión: ${mimeType}`);
+
   // Grabación a archivo (opcional)
   state.recordingPath = null;
   if ($("record-file").checked) {
-    state.recordingPath = await window.namasub.startRecordingFile();
+    state.recordingPath = await window.namasub.startRecordingFile(
+      extensionForMime(mimeType)
+    );
     if (!state.recordingPath) $("record-file").checked = false;
   }
 
@@ -589,6 +613,7 @@ async function start() {
   const delayMs = parseInt($("delay").value, 10) * 1000;
   state.player = new DelayedPlayer($("player"), state.stream, {
     delayMs,
+    mimeType,
     onChunk: state.recordingPath
       ? (buf) => window.namasub.appendRecordingChunk(buf)
       : null,

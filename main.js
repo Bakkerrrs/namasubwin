@@ -132,20 +132,24 @@ ipcMain.handle("apikey:set", (event, key) => {
 
 let recStream = null;
 
-ipcMain.handle("rec:start", async () => {
+ipcMain.handle("rec:start", async (event, ext) => {
+  const extension = ext === "mp4" ? "mp4" : "webm";
   const stamp = new Date()
     .toISOString()
     .replace(/[:T]/g, "-")
     .slice(0, 19);
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
     title: "Guardar grabación",
-    defaultPath: path.join(app.getPath("videos"), `namasub-${stamp}.webm`),
-    filters: [{ name: "Video WebM", extensions: ["webm"] }],
+    defaultPath: path.join(app.getPath("videos"), `namasub-${stamp}.${extension}`),
+    filters: [{ name: `Video ${extension.toUpperCase()}`, extensions: [extension] }],
   });
   if (canceled || !filePath) return null;
   recStream = fs.createWriteStream(filePath);
   return filePath;
 });
+
+// Estado de la aceleración por GPU (para verificarla desde el modo debug).
+ipcMain.handle("gpu:status", () => app.getGPUFeatureStatus());
 
 ipcMain.on("rec:chunk", (event, buffer) => {
   if (recStream) recStream.write(Buffer.from(buffer));

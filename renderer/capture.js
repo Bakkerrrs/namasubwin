@@ -45,19 +45,25 @@ export async function warmUpPermissions() {
   }
 }
 
-/** Stream de pantalla/ventana; con systemAudio=true añade el loopback del sistema. */
-async function getDesktopStream(sourceId, withSystemAudio) {
+/** Stream de pantalla/ventana; con systemAudio=true añade el loopback del
+ *  sistema. `maxHeight` limita la resolución capturada (Chromium la escala
+ *  conservando el aspecto): capturar un escritorio 4K a resolución nativa
+ *  cuadruplica el costo de encoding sin aportar nada a los subtítulos. */
+async function getDesktopStream(sourceId, withSystemAudio, maxHeight = 0) {
+  const mandatory = {
+    chromeMediaSource: "desktop",
+    chromeMediaSourceId: sourceId,
+    maxFrameRate: 30,
+  };
+  if (maxHeight > 0) {
+    mandatory.maxHeight = maxHeight;
+    mandatory.maxWidth = Math.round((maxHeight * 16) / 9);
+  }
   const constraints = {
     audio: withSystemAudio
       ? { mandatory: { chromeMediaSource: "desktop" } }
       : false,
-    video: {
-      mandatory: {
-        chromeMediaSource: "desktop",
-        chromeMediaSourceId: sourceId,
-        maxFrameRate: 30,
-      },
-    },
+    video: { mandatory },
   };
   return navigator.mediaDevices.getUserMedia(constraints);
 }
@@ -69,7 +75,8 @@ async function getDesktopStream(sourceId, withSystemAudio) {
  * @param {object} audio  {kind: "system"} | {kind: "device", deviceId} | {kind: "none"}
  * @param {object} opts   {desktopAudioId} id de pantalla para el loopback cuando
  *                        el video viene de una cámara (el loopback es global,
- *                        pero Chromium exige pedirlo junto a un video desktop)
+ *                        pero Chromium exige pedirlo junto a un video desktop);
+ *                        {maxHeight} límite de resolución de captura (0 = nativa)
  * @returns {Promise<MediaStream>} stream con 1 pista de video y 0..1 de audio
  */
 export async function buildStream(video, audio, opts = {}) {
@@ -95,7 +102,11 @@ export async function buildStream(video, audio, opts = {}) {
       if (track) out.addTrack(track);
     }
   } else {
-    const desktop = await getDesktopStream(video.id, audio.kind === "system");
+    const desktop = await getDesktopStream(
+      video.id,
+      audio.kind === "system",
+      opts.maxHeight || 0
+    );
     out.addTrack(desktop.getVideoTracks()[0]);
     const track = desktop.getAudioTracks()[0];
     if (track) out.addTrack(track);

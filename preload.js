@@ -9,7 +9,8 @@ contextBridge.exposeInMainWorld("namasub", {
   getApiKey: () => ipcRenderer.invoke("apikey:get"),
   setApiKey: (key) => ipcRenderer.invoke("apikey:set", key),
 
-  startRecordingFile: () => ipcRenderer.invoke("rec:start"),
+  startRecordingFile: (ext) => ipcRenderer.invoke("rec:start", ext),
+  getGpuStatus: () => ipcRenderer.invoke("gpu:status"),
   appendRecordingChunk: (buffer) => ipcRenderer.send("rec:chunk", buffer),
   stopRecordingFile: () => ipcRenderer.invoke("rec:stop"),
 

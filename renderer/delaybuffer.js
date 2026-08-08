@@ -12,22 +12,31 @@
 // captura: currentTime == 0 es el instante en que se pulsó Iniciar. Esa es la
 // base de tiempo con la que se fechan los subtítulos.
 
+// H.264 primero: en Windows se codifica por hardware (Media Foundation),
+// mientras que VP9/VP8 van por software y ahogan la CPU con fuentes 4K.
 const MIME_CANDIDATES = [
+  'video/mp4;codecs="avc1.640028,opus"',
+  'video/mp4;codecs="avc1.42E01E,opus"',
   'video/webm;codecs="vp9,opus"',
   'video/webm;codecs="vp8,opus"',
   "video/webm",
 ];
 
-function pickMime(hasAudio) {
+export function pickMime(hasAudio) {
   const candidates = hasAudio
     ? MIME_CANDIDATES
-    : MIME_CANDIDATES.map((m) => m.replace(",opus", ""));
+    : MIME_CANDIDATES.map((m) => m.replace(",opus", "").replace(";codecs=\"\"", ""));
   for (const mime of candidates) {
     if (MediaRecorder.isTypeSupported(mime) && MediaSource.isTypeSupported(mime)) {
       return mime;
     }
   }
-  throw new Error("Este sistema no soporta la codificación WebM necesaria.");
+  throw new Error("Este sistema no soporta la codificación de video necesaria.");
+}
+
+/** Extensión de archivo acorde al contenedor elegido. */
+export function extensionForMime(mime) {
+  return mime.includes("mp4") ? "mp4" : "webm";
 }
 
 export class DelayedPlayer {
@@ -40,6 +49,7 @@ export class DelayedPlayer {
     this.video = videoEl;
     this.stream = stream;
     this.delayMs = opts.delayMs ?? 10000;
+    this.mimeType = opts.mimeType || null; // null = elegir automáticamente
     this.onChunk = opts.onChunk || null;
     this.onState = opts.onState || (() => {});
 
@@ -64,7 +74,8 @@ export class DelayedPlayer {
   }
 
   async start() {
-    const mime = pickMime(this.stream.getAudioTracks().length > 0);
+    const mime =
+      this.mimeType || pickMime(this.stream.getAudioTracks().length > 0);
 
     this._mediaSource = new MediaSource();
     this.video.src = URL.createObjectURL(this._mediaSource);
