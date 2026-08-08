@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("namasub", {
 
   startRecordingFile: (ext) => ipcRenderer.invoke("rec:start", ext),
   getGpuStatus: () => ipcRenderer.invoke("gpu:status"),
+  setSessionActive: (active) => ipcRenderer.send("session:active", active),
   appendRecordingChunk: (buffer) => ipcRenderer.send("rec:chunk", buffer),
   stopRecordingFile: () => ipcRenderer.invoke("rec:stop"),
 

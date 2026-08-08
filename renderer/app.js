@@ -627,10 +627,20 @@ async function start() {
   });
   await state.player.start();
 
-  // Bucles de render, traductor de respaldo y estadísticas de depuración
+  // Bucles de render, traductor de respaldo y estadísticas de depuración.
+  // El backstop repinta los subtítulos si el rAF se pausa (throttling por
+  // oclusión de Chromium: subs congelados con el video andando).
   state.renderTimer = requestAnimationFrame(renderLoop);
+  state.lastRenderTs = 0;
+  state.renderBackstop = setInterval(() => {
+    if (state.running && performance.now() - state.lastRenderTs > 400) {
+      renderSubtitles();
+    }
+  }, 300);
   state.fallbackTimer = setInterval(runFallback, 1500);
   state.debugTimer = setInterval(updateDebugStats, 1000);
+
+  window.namasub.setSessionActive(true); // no apagar la pantalla durante la sesión
 
   state.running = true;
   $("btn-toggle").disabled = false;
@@ -654,8 +664,10 @@ async function stop() {
   dbg.log("app", "Deteniendo sesión");
   state.running = false;
   cancelAnimationFrame(state.renderTimer);
+  clearInterval(state.renderBackstop);
   clearInterval(state.fallbackTimer);
   clearInterval(state.debugTimer);
+  window.namasub.setSessionActive(false);
 
   state.realtime?.disconnect();
   state.realtime = null;
@@ -865,8 +877,7 @@ async function runFallback() {
 // Render de la capa de subtítulos sobre el video diferido
 // ---------------------------------------------------------------------------
 
-function renderLoop() {
-  if (!state.running) return;
+function renderSubtitles() {
   const mediaMs = state.player?.mediaTimeMs() ?? 0;
   const entry = state.timeline?.activeAt(mediaMs);
 
@@ -877,6 +888,12 @@ function renderLoop() {
   } else {
     hideSubtitles();
   }
+  state.lastRenderTs = performance.now();
+}
+
+function renderLoop() {
+  if (!state.running) return;
+  renderSubtitles();
   state.renderTimer = requestAnimationFrame(renderLoop);
 }
 

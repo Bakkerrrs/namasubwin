@@ -44,6 +44,10 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      // La detección de oclusión de Chromium tiene falsos positivos con
+      // ventanas fullscreen en Windows: pausaba el requestAnimationFrame
+      // que dibuja los subtítulos (video andando, subs congelados).
+      backgroundThrottling: false,
     },
   });
 
@@ -150,6 +154,20 @@ ipcMain.handle("rec:start", async (event, ext) => {
 
 // Estado de la aceleración por GPU (para verificarla desde el modo debug).
 ipcMain.handle("gpu:status", () => app.getGPUFeatureStatus());
+
+// Con una sesión activa, evita que Windows apague la pantalla a mitad del
+// programa (el espectador no toca el mouse por largos ratos).
+const { powerSaveBlocker } = require("electron");
+let sleepBlockerId = null;
+
+ipcMain.on("session:active", (event, active) => {
+  if (active && sleepBlockerId == null) {
+    sleepBlockerId = powerSaveBlocker.start("prevent-display-sleep");
+  } else if (!active && sleepBlockerId != null) {
+    powerSaveBlocker.stop(sleepBlockerId);
+    sleepBlockerId = null;
+  }
+});
 
 ipcMain.on("rec:chunk", (event, buffer) => {
   if (recStream) recStream.write(Buffer.from(buffer));
