@@ -1,0 +1,67 @@
+# CI/CD de NamaSub:
+#  - Pull request hacia main  → pruebas + build de Windows; los .exe quedan
+#    como artefactos del run para probarlos antes de mergear.
+#  - Push (merge) a main      → pruebas + build + Release automático con el
+#    instalador (Setup) y el portable adjuntos.
+name: Build y Release
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: write # crear releases y subir assets
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Pruebas
+        run: npm test
+
+      - name: Compilar ejecutables (electron-builder)
+        run: npm run dist
+        env:
+          # electron-builder no debe intentar publicar por su cuenta.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Leer versión del package.json
+        id: version
+        shell: bash
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # --- Pull requests: los .exe como artefactos del run ---
+      - name: Subir artefactos (PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NamaSub-v${{ steps.version.outputs.version }}-pr${{ github.event.pull_request.number }}
+          path: dist/*.exe
+          if-no-files-found: error
+
+      # --- Merge a main: Release automático con los .exe adjuntos ---
+      - name: Crear Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}-build.${{ github.run_number }}
+          name: NamaSub v${{ steps.version.outputs.version }} (build ${{ github.run_number }})
+          files: dist/*.exe
+          make_latest: "true"
+          generate_release_notes: true
+          fail_on_unmatched_files: true
